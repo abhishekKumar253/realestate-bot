@@ -1,0 +1,98 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+enum LeadStatus {
+    NEW
+    QUALIFIED
+    SITE_VISIT_SCHEDULED
+    SITE_VISIT_DONE
+    CONVERTED
+    LOST
+}
+
+enum PropertyType {
+    APARTMENT
+    VILLA
+    PLOT
+    COMMERCIAL
+}
+
+enum ConversationState {
+    GREETING
+    ASK_PROPERTY_TYPE
+    ASK_BUDGET
+    ASK_LOCATION
+    ASK_BHK
+    ASK_PURPOSE
+    ASK_TIMELINE
+    ASK_NAME
+    ASK_SITE_VISIT
+    COMPLETED
+}
+
+enum MessageRole {
+    USER
+    BOT
+}
+
+enum Purpose {
+    INVESTMENT
+    END_USE
+}
+
+enum Timeline {
+    ONE_MONTH
+    THREE_MONTHS
+    SIX_MONTHS
+    MORE_THAN_SIX_MONTHS
+}
+
+// ========== Models ==========
+model Lead {
+    id           String        @id @default(cuid())
+    phone        String        @unique
+    name         String?
+    propertyType PropertyType?
+    budget       String?
+    location     String?
+    bhk          String?
+    purpose      Purpose?
+    timeline     Timeline?
+    status       LeadStatus    @default(NEW)
+    createdAt    DateTime      @default(now())
+    updatedAt    DateTime      @updatedAt
+
+    conversations Conversation[]
+
+    @@map("leads")
+}
+
+model Conversation {
+    id        String            @id @default(cuid())
+    leadId    String
+    state     ConversationState @default(GREETING)
+    createdAt DateTime          @default(now())
+    updatedAt DateTime          @updatedAt
+
+    lead     Lead      @relation(fields: [leadId], references: [id])
+    messages Message[]
+
+    @@map("conversations")
+}
+
+model Message {
+    id             String      @id @default(cuid())
+    conversationId String
+    role           MessageRole
+    content        String
+    createdAt      DateTime    @default(now())
+
+    conversation Conversation @relation(fields: [conversationId], references: [id])
+
+    @@map("messages")
+}
