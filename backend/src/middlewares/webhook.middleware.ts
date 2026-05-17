@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import { env } from "../config/index";
 import logger from "../utils/logger";
 
+// ========== Webhook Verification (GET) ==========
 export const verifyWebhook = (req: Request, res: Response): void => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -18,6 +19,7 @@ export const verifyWebhook = (req: Request, res: Response): void => {
   res.status(403).json({ error: "Forbidden" });
 };
 
+// ========== Signature Verification (POST) ==========
 export const verifySignature = (
   req: Request,
   res: Response,
@@ -37,10 +39,15 @@ export const verifySignature = (
     return;
   }
 
-  const body = JSON.stringify(req.body);
+  if (!req.rawBody) {
+    logger.warn("❌ No raw body available");
+    res.status(500).json({ error: "Internal configuration error" });
+    return;
+  }
+
   const expectedSignature = `sha256=${crypto
     .createHmac("sha256", env.WHATSAPP_APP_SECRET)
-    .update(body)
+    .update(req.rawBody)
     .digest("hex")}`;
 
   if (signature !== expectedSignature) {
@@ -50,5 +57,4 @@ export const verifySignature = (
   }
 
   next();
-
-}
+};

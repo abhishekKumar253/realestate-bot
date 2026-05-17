@@ -41,7 +41,18 @@ export interface IncomingMessage {
   text?: {
     body: string;
   };
-  interactive?: any;
+  interactive?: {
+    type: string;
+    button_reply?: {
+      id: string;
+      title: string;
+    };
+    list_reply?: {
+      id: string;
+      title: string;
+      description?: string;
+    };
+  };
 }
 
 export interface Status {
@@ -58,4 +69,11 @@ export interface SendMessagePayload {
   text: {
     body: string;
   };
+}
+
+// ========== Express Request Extension ==========
+declare module "express" {
+  interface Request {
+    rawBody?: string;
+  }
 }

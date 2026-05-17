@@ -6,20 +6,38 @@ import * as Sentry from "@sentry/node";
 import { env } from "./config/index";
 import logger from "./utils/logger";
 import { prisma } from "./db/prisma";
+import webhookRouter from "./routes/webhook.route";
 
 const app = express();
 
+// ========== Middlewares ==========
 app.use(helmet());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (_req: any, _res, buf) => {
+      _req.rawBody = buf.toString();
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
+// ========== Rate Limiting ==========
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: "Too many requests, please try again later.",
 });
 
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5000,
+  message: "Too many requests, please try again later.",
+});
 
+// ========== Routes ==========
+app.use("/webhook", webhookLimiter, webhookRouter);
+
+// ========== Health Check ==========
 app.get("/health", generalLimiter, (_req, res) => {
   res.status(200).json({
     status: "ok",
@@ -28,10 +46,12 @@ app.get("/health", generalLimiter, (_req, res) => {
   });
 });
 
+// ========== Sentry Error Handler ==========
 if (env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 
+// ========== Global Error Handler ==========
 app.use(
   (
     err: Error,
@@ -44,6 +64,7 @@ app.use(
   }
 );
 
+// ========== Server Start ==========
 const PORT = Number.parseInt(env.PORT, 10) || 5000;
 
 const start = async () => {
