@@ -184,8 +184,12 @@ export const sendTypingIndicator = async (to: string): Promise<boolean> => {
 
     logger.info({ to }, "✅ Typing indicator sent");
     return true;
-  } catch (error) {
-    logger.error({ error, to }, "❌ Failed to send typing indicator");
+  } catch (error: unknown) {
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
+    logger.error({ error: metaError, to }, "❌ Failed to send typing indicator");
     return false;
   }
 };

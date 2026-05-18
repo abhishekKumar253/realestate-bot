@@ -21,11 +21,11 @@ import {
 import {
   sendTextMessage,
   markAsRead,
-  sendTypingIndicator,         
+  sendTypingIndicator,
 } from "../services/whatsapp.service";
 import logger from "../utils/logger";
 import { env } from "../config/index";
-import { prisma } from "../db/prisma";   
+import { prisma } from "../db/prisma";
 import type { WhatsAppWebhookPayload, IncomingMessage } from "../types/whatsapp.types";
 
 // ========== GET — Meta Webhook Verification ==========
@@ -46,12 +46,14 @@ export const handleVerification = (req: Request, res: Response): void => {
 
 // ========== Pure Helpers ==========
 
+/** Extract readable text from any supported message type */
 const getUserText = (msg: IncomingMessage): string => {
   if (msg.type === "text") return msg.text?.body ?? "";
   if (msg.type === "interactive") return msg.interactive?.button_reply?.title ?? "";
   return "";
 };
 
+/** Build a flat update payload from extracted data */
 const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
   if (extracted.name) data.name = extracted.name;
@@ -64,6 +66,7 @@ const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> 
   return data;
 };
 
+/** Compute which required fields are still missing */
 const getMissingFields = (lead: Record<string, unknown>) => {
   const required = [
     "propertyType",
@@ -77,6 +80,7 @@ const getMissingFields = (lead: Record<string, unknown>) => {
   return required.filter((f) => !lead[f]);
 };
 
+/** Map missing fields to conversation states */
 const fieldToState: Record<string, ConversationState> = {
   propertyType: ConversationState.ASK_PROPERTY_TYPE,
   budget: ConversationState.ASK_BUDGET,
@@ -87,6 +91,7 @@ const fieldToState: Record<string, ConversationState> = {
   name: ConversationState.ASK_NAME,
 };
 
+/** Determine next conversation state based on missing data */
 const computeNewState = (
   currentState: ConversationState,
   missingFields: string[],
@@ -116,9 +121,9 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // ✅ DUPLICATE CHECK – avoid processing the same WhatsApp message twice
+    // ✅ DUPLICATE CHECK – Use WhatsApp message ID to prevent double processing
     const existingMsg = await prisma.message.findUnique({
-      where: { id: message.id },
+      where: { whatsappMessageId: message.id },
     });
     if (existingMsg) {
       logger.info("Duplicate webhook event received, skipping processing");
@@ -131,10 +136,10 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     // 1. Mark as read
     await markAsRead(message.id);
 
-    // ✅ Show typing indicator immediately – WhatsApp stops automatically after reply
+    // 2. Show typing indicator (WhatsApp automatically stops it after reply)
     await sendTypingIndicator(phone);
 
-    // 2. Get or create lead
+    // 3. Get or create lead
     const lead = await getOrCreateLead(phone, contactName);
     const conversation = lead.conversations[0];
     if (!conversation) {
@@ -142,17 +147,17 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // 3. Conversation history (for reply generation only, not for extraction)
+    // 4. Conversation history (for reply generation only, not for extraction)
     const history = await getConversationHistory(conversation.id);
     const historyForOpenAI = history.map((msg) => ({
       role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
       content: msg.content,
     }));
 
-    // 4. Extract lead data from current message ONLY (avoid stale context)
+    // 5. Extract lead data from current message ONLY (no stale history)
     const extracted = await extractLeadData(userText, []);
 
-    // 5. Manual intent detection for site visit (loop breaker)
+    // 6. Manual intent detection for site visit (loop breaker)
     if (
       conversation.state === ConversationState.ASK_SITE_VISIT ||
       conversation.state === ConversationState.COMPLETED
@@ -170,16 +175,16 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       }
     }
 
-    // 6. Save user message
-    await saveMessage(conversation.id, MessageRole.USER, userText);
+    // 7. Save user message (with WhatsApp message ID for idempotency)
+    await saveMessage(conversation.id, MessageRole.USER, userText, message.id);
 
-    // 7. Update lead if any data extracted
+    // 8. Update lead if any data extracted
     const updateData = buildUpdateData(extracted);
     if (Object.keys(updateData).length > 0) {
       await updateLead(phone, updateData);
     }
 
-    // 8. Merge DB lead + new extracted data properly
+    // 9. Merge DB lead + new extracted data properly
     const mergedLead = {
       propertyType: (updateData.propertyType ?? lead.propertyType) as string | null,
       budget: (updateData.budget ?? lead.budget) as string | null,
@@ -193,13 +198,13 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const missingFields = getMissingFields(mergedLead);
     const newState = computeNewState(conversation.state, missingFields, extracted.wantsVisit);
 
-    // 9. Persist state & status
+    // 10. Persist state & status
     if (newState === ConversationState.COMPLETED && missingFields.length === 0) {
       await updateLeadStatus(phone, LeadStatus.SITE_VISIT_SCHEDULED);
     }
     await updateConversationState(conversation.id, newState);
 
-    // 10. Generate reply — include current message for natural context
+    // 11. Generate reply – include current message for natural context
     const reply = await generateReply(
       missingFields,
       {
@@ -214,7 +219,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       [...historyForOpenAI, { role: "user" as const, content: userText }]
     );
 
-    // 11. Send reply then save
+    // 12. Send reply then save (typing indicator will auto‑stop)
     const isSent = await sendTextMessage(phone, reply);
     if (isSent) {
       await saveMessage(conversation.id, MessageRole.BOT, reply);

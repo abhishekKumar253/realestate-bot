@@ -98,11 +98,12 @@ export const updateConversationState = async (
   }
 };
 
-// ========== Save Message ==========
+// ========== Save Message (UPDATED) ==========
 export const saveMessage = async (
   conversationId: string,
   role: MessageRole,
-  content: string
+  content: string,
+  whatsappMessageId?: string   // ✅ optional WhatsApp message ID for deduplication
 ): Promise<void> => {
   try {
     await prisma.message.create({
@@ -110,6 +111,7 @@ export const saveMessage = async (
         conversationId,
         role,
         content,
+        whatsappMessageId: whatsappMessageId ?? null,   // store if provided
       },
     });
   } catch (error) {
