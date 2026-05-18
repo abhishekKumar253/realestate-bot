@@ -69,6 +69,12 @@ const PORT = Number.parseInt(env.PORT, 10) || 5000;
 
 const start = async () => {
   try {
+    // Debug — env check
+    logger.info({
+      dbUrl: process.env.DATABASE_URL ? "SET" : "NOT SET",
+      directUrl: process.env.DIRECT_URL ? "SET" : "NOT SET",
+    }, "🔍 Environment check");
+
     await prisma.$connect();
     logger.info("✅ Database connected");
 

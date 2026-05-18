@@ -1,3 +1,6 @@
+import * as dotenv from "dotenv";
+dotenv.config();
+
 import { PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { Pool, neonConfig } from "@neondatabase/serverless";
@@ -22,3 +25,5 @@ if (!globalForPrisma.prisma) {
 }
 
 export const prisma = globalForPrisma.prisma as PrismaClient;
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
