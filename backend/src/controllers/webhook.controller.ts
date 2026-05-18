@@ -140,6 +140,23 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     // 4. Extract lead data (using current message + history)
     const extracted = await extractLeadData(userText, historyForOpenAI);
 
+    // ===== MANUAL INTENT DETECTION for site visit agreement (breaks the loop) =====
+    if (
+      conversation.state === ConversationState.ASK_SITE_VISIT ||
+      conversation.state === ConversationState.COMPLETED
+    ) {
+      const lowerMsg = userText.toLowerCase().trim();
+      const affirmativePatterns = [
+        "haan", "ha", "yes", "haan ji", "hanji", "ok", "okay", "ready",
+        "ready hu", "ready hai", "taiyar hai", "taiyar hu", "chalo", "chaliye",
+        "abhi karte hain", "bilkul", "theek hai", "sahi hai", "ji haan",
+        "i am ready", "let's go", "sure", "confirmed", "done", "chalega"
+      ];
+      if (affirmativePatterns.some(pattern => lowerMsg.includes(pattern))) {
+        extracted.wantsVisit = true;
+      }
+    }
+
     // 5. Save user message
     await saveMessage(conversation.id, MessageRole.USER, userText);
 
