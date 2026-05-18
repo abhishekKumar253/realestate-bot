@@ -18,9 +18,14 @@ import {
   generateReply,
   type ExtractedLeadData,
 } from "../services/openai.service";
-import { sendTextMessage, markAsRead } from "../services/whatsapp.service";
+import {
+  sendTextMessage,
+  markAsRead,
+  sendTypingIndicator,         
+} from "../services/whatsapp.service";
 import logger from "../utils/logger";
 import { env } from "../config/index";
+import { prisma } from "../db/prisma";   
 import type { WhatsAppWebhookPayload, IncomingMessage } from "../types/whatsapp.types";
 
 // ========== GET — Meta Webhook Verification ==========
@@ -96,6 +101,7 @@ const computeNewState = (
 
 // ========== POST — Incoming Messages ==========
 export const handleIncoming = async (req: Request, res: Response): Promise<void> => {
+  // Always acknowledge receipt immediately
   res.status(200).json({ status: "ok" });
 
   try {
@@ -110,11 +116,23 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
+    // ✅ DUPLICATE CHECK – avoid processing the same WhatsApp message twice
+    const existingMsg = await prisma.message.findUnique({
+      where: { id: message.id },
+    });
+    if (existingMsg) {
+      logger.info("Duplicate webhook event received, skipping processing");
+      return;
+    }
+
     const contactName = extractContactName(body) ?? undefined;
     logger.info({ phone, message: userText }, "📩 Incoming message");
 
     // 1. Mark as read
     await markAsRead(message.id);
+
+    // ✅ Show typing indicator immediately – WhatsApp stops automatically after reply
+    await sendTypingIndicator(phone);
 
     // 2. Get or create lead
     const lead = await getOrCreateLead(phone, contactName);
@@ -124,17 +142,17 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // 3. Conversation history
+    // 3. Conversation history (for reply generation only, not for extraction)
     const history = await getConversationHistory(conversation.id);
     const historyForOpenAI = history.map((msg) => ({
       role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
       content: msg.content,
     }));
 
-    // 4. Extract lead data
-    const extracted = await extractLeadData(userText, historyForOpenAI);
+    // 4. Extract lead data from current message ONLY (avoid stale context)
+    const extracted = await extractLeadData(userText, []);
 
-    // 5. Manual intent detection for site visit
+    // 5. Manual intent detection for site visit (loop breaker)
     if (
       conversation.state === ConversationState.ASK_SITE_VISIT ||
       conversation.state === ConversationState.COMPLETED
@@ -155,7 +173,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     // 6. Save user message
     await saveMessage(conversation.id, MessageRole.USER, userText);
 
-    // 7. Update lead if data extracted
+    // 7. Update lead if any data extracted
     const updateData = buildUpdateData(extracted);
     if (Object.keys(updateData).length > 0) {
       await updateLead(phone, updateData);
@@ -181,7 +199,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     }
     await updateConversationState(conversation.id, newState);
 
-    // 10. Generate reply — pass latest user message in history
+    // 10. Generate reply — include current message for natural context
     const reply = await generateReply(
       missingFields,
       {

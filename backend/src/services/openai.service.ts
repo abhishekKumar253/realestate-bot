@@ -108,10 +108,12 @@ export const generateReply = async (
   }
 
   try {
-    // Last user message nikalo — language detect karne ke liye
-    const lastUserMessage = conversationHistory
-      .filter((msg) => msg.role === "user")
-      .at(-1)?.content ?? "";
+    // Find the last user message using findLast (ES2023+)
+    // If your tsconfig does not support findLast, use:
+    // const lastUserMessage = [...conversationHistory].reverse().find(msg => msg.role === "user")?.content ?? "";
+    const lastUserMessage = conversationHistory.findLast(
+      (msg: { role: string; content: string }) => msg.role === "user"
+    )?.content ?? "";
 
     const systemPrompt = `
 You are a friendly, polite, and professional real estate assistant for a property business in Ranchi, Jharkhand, India.

@@ -16,6 +16,7 @@ const getHeaders = () => {
   };
 };
 
+// ========== Send Text Message ==========
 export const sendTextMessage = async (
   to: string,
   message: string
@@ -51,7 +52,7 @@ export const sendTextMessage = async (
   }
 };
 
-
+// ========== Send Interactive Buttons ==========
 export const sendButtonMessage = async (
   to: string,
   message: string,
@@ -94,6 +95,7 @@ export const sendButtonMessage = async (
   }
 };
 
+// ========== Send List Message ==========
 export const sendListMessage = async (
   to: string,
   message: string,
@@ -138,6 +140,7 @@ export const sendListMessage = async (
   }
 };
 
+// ========== Mark Message as Read ==========
 export const markAsRead = async (messageId: string): Promise<boolean> => {
   try {
     const payload = {
@@ -158,6 +161,31 @@ export const markAsRead = async (messageId: string): Promise<boolean> => {
         ? (error as any).response?.data ?? error.message
         : error;
     logger.error({ error: metaError, messageId }, "❌ Failed to mark as read");
+    return false;
+  }
+};
+
+// ========== Send Typing Indicator ==========
+export const sendTypingIndicator = async (to: string): Promise<boolean> => {
+  try {
+    const payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "typing_indicator",
+      typing_indicator: {
+        type: "text",
+      },
+    };
+
+    await axios.post(WA_API_URL, payload, {
+      headers: getHeaders(),
+    });
+
+    logger.info({ to }, "✅ Typing indicator sent");
+    return true;
+  } catch (error) {
+    logger.error({ error, to }, "❌ Failed to send typing indicator");
     return false;
   }
 };
