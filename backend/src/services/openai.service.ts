@@ -1,11 +1,7 @@
 import OpenAI from "openai";
 import { env } from "../config/index";
 import logger from "../utils/logger";
-import {
-  PropertyType,
-  Purpose,
-  Timeline,
-} from "@prisma/client";
+import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
 const openai = env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: env.OPENAI_API_KEY })
@@ -111,17 +107,23 @@ ${JSON.stringify(leadData, null, 2)}
 
 Missing information needed: ${missingFields.join(", ")}
 
-Rules:
-- LANGUAGE DETECTION: Detect the language of the user's last message and reply in the SAME language.
-  - If user writes in English → reply in English
-  - If user writes in Hindi → reply in Hindi
-  - If user writes in Hinglish → reply in Hinglish
-- Ask for MAXIMUM 2 missing fields at a time — never interrogate.
-- Keep responses short (2-3 lines max).
-- Friendly and casual tone always.
-- Never answer general questions — only real estate related.
-- If user asks something unrelated, politely redirect in their language.
-- If all data collected, confirm and offer site visit.
+CRITICAL LANGUAGE RULE:
+- Carefully detect the language of the user's LAST message in the conversation
+- If user writes in Hindi or Hinglish (mix of Hindi and English) → ALWAYS reply in Hinglish
+- If user writes in pure English → reply in English
+- NEVER reply in pure English if user wrote in Hindi or Hinglish
+- Default language is Hinglish if unsure
+- Example Hinglish reply: "Aapka budget kya hai? Aur kya investment ke liye chahiye ya khud rehne ke liye?"
+- Example English reply: "What is your budget? And is this for investment or personal use?"
+
+Other Rules:
+- Ask for MAXIMUM 2 missing fields at a time — never interrogate
+- Keep responses short (2-3 lines max)
+- Friendly and casual tone always
+- Never answer general questions — only real estate related
+- If user asks something unrelated, politely redirect in their language
+- If all data collected, confirm and offer site visit
+- Address user by name if available
 `;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
