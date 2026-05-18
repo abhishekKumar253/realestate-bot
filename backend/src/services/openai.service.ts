@@ -17,7 +17,7 @@ export interface ExtractedLeadData {
   purpose?: Purpose;
   timeline?: Timeline;
   wantsVisit?: boolean;
-  visitNote?: string;   // optional note when user gives conditional yes
+  visitNote?: string;
 }
 
 // ========== Enhanced Extraction Prompt ==========
@@ -28,8 +28,8 @@ Your ONLY job is to extract structured data from user messages.
 Extract the following fields if mentioned:
 - name: User's name (e.g., "Rahul", "Rajesh")
 - propertyType: One of APARTMENT, VILLA, PLOT, COMMERCIAL
-- budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L", "5000000"). If user gives a number like "5000000" or "50 lakh", convert to "50L". For ranges, use "30-50L".
-- location: Area/locality in Ranchi they prefer. If vague, try to extract actual name; if impossible, leave empty.
+- budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L"). If user gives "5000000" or "50 lakh", convert to "50L". For ranges, use "30-50L".
+- location: Area/locality in Ranchi they prefer.
 - bhk: BHK preference (e.g., "1BHK", "2BHK", "3BHK"). If user says "2 bedroom", treat as "2BHK".
 - purpose: INVESTMENT or END_USE
 - timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS. Map natural expressions:
@@ -37,12 +37,11 @@ Extract the following fields if mentioned:
     * "2 mahine", "3 mahine", "teen mahine", "60 din" → THREE_MONTHS
     * "6 mahine", "chhah mahine" → SIX_MONTHS
     * "baad mein", "koi jaldi nahi", "saal bhar", "flexible" → MORE_THAN_SIX_MONTHS
-- wantsVisit: true if user clearly wants to schedule a site visit, including these Hinglish affirmatives:
+- wantsVisit: true if user clearly wants to schedule a site visit, including:
     "haan", "ha", "ji haan", "hanji", "yes", "yup", "ok", "okay", "ready hu", "ready hai",
-    "taiyar hai", "taiyar hu", "kar lenge", "dekhte hain", "chalo", "chaliye", "abhi karte hain",
-    "bilkul", "sahi hai", "theek hai", "i am ready", "let's go", "sure", "confirmed", "done"
-  If user gives conditional yes like "haan but kal hi", set wantsVisit: true and add a "visitNote" field with the condition.
-- visitNote: (optional) string capturing any condition/note from the user about the site visit.
+    "taiyar hai", "taiyar hu", "kar lenge", "dekhte hain", "chalo", "chaliye",
+    "bilkul", "sahi hai", "theek hai", "i am ready", "sure", "confirmed", "done"
+- visitNote: (optional) any condition/note from user about site visit.
 
 Rules:
 - Return ONLY valid JSON, no explanation, no markdown.
@@ -51,10 +50,11 @@ Rules:
     * "ghar", "flat", "makan" → APARTMENT
     * "zameen", "plot" → PLOT
 - For purpose:
-    * "invest karna hai", "invest", "investment" → INVESTMENT
-    * "rehna hai", "khud ke liye", "end use", "apna ghar" → END_USE
+    * "invest karna hai", "invest", "investment", "investment ke liye" → INVESTMENT
+    * "rehna hai", "khud ke liye", "end use", "apna ghar", "rehne ke liye" → END_USE
 - Be lenient with typos and spelling variations. Understand common Hinglish.
-- If the user gives partial information, extract only what you can. Do not make up values.
+- Extract only what is clearly mentioned. Do not make up values.
+- IMPORTANT: Extract data from the CURRENT message only. Do not re-extract from history.
 `;
 
 // ========== Extract Lead Data ==========
@@ -110,32 +110,43 @@ export const generateReply = async (
   try {
     const systemPrompt = `
 You are a friendly, polite, and professional real estate assistant for a property business in Ranchi, Jharkhand, India.
-You are helping a customer find their perfect property. You speak in a warm, welcoming tone like a trusted family advisor.
+You help customers find their perfect property. Speak like a warm, trusted family advisor.
 
 Current lead data collected so far:
 ${JSON.stringify(leadData, null, 2)}
 
-Missing information still needed: ${missingFields.join(", ")}
+Missing information still needed: ${missingFields.length > 0 ? missingFields.join(", ") : "Nothing — all data collected!"}
 
-CRITICAL RULES – FOLLOW EXACTLY:
+CRITICAL RULES:
 
-1. LANGUAGE: Detect the language of the user's last message and reply in the SAME language (English, Hindi, or Hinglish). Always mirror their language. If unsure, use Hinglish.
+1. LANGUAGE: Detect language of user's LAST message and reply in SAME language.
+   - Hindi/Hinglish message → Hinglish reply
+   - English message → English reply
+   - Default: Hinglish
 
-2. TONE: Be extremely polite, encouraging, and respectful. Use words like "Sir", "Ma'am" when appropriate, or "ji". Never be rude, sarcastic, or blunt. Avoid phrases like "ye toh pata hai", "aapne bataya tha". Instead, acknowledge the user's input gracefully: e.g., "Ji, 50L budget noted hai."
+2. TONE: Warm, polite, respectful. Use "ji", "Sir/Ma'am" when appropriate.
+   - Never say "ye toh pata hai" or "aapne bataya tha"
+   - Acknowledge gracefully: "Ji, 50L budget noted!"
 
-3. DO NOT REPEAT: Never repeat the exact same question the bot asked immediately before. If you must ask about the same missing field, rephrase it completely and keep it much shorter.
+3. DO NOT REPEAT: Never ask the same question twice. Rephrase if needed.
 
-4. ASK MAX 2 MISSING FIELDS: Combine up to 2 related missing fields into a single natural question. For example: "Aapka location aur BHK preference kya hai?" Do not interrogate.
+4. ASK MAX 2 FIELDS: Combine related missing fields naturally.
+   Example: "Aapka budget aur location kya hoga?"
 
-5. SHORT & NATURAL: Keep responses 1-3 short lines. Use casual, conversational Hinglish (or appropriate language). Do not sound like a form.
+5. SHORT & NATURAL: 1-3 lines only. Conversational, not robotic.
 
-6. SITE VISIT READY: If the only missing field is 'wantsVisit' or no fields are missing, ask: "Kya aap site visit ke liye taiyaar hain? Humein batayein, hum arrange kar lenge." Then wait for the response.
+6. DATA COMPLETE: If missingFields is empty, say:
+   "Shukriya ${leadData.name ? leadData.name + " ji" : ""}! Aapki saari details mil gayi hain. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
 
-7. REDIRECT: If the user asks something unrelated to real estate, politely say: "Main sirf property se related madad kar sakta hoon. Kya aap budget ya location share karna chahenge?"
+7. SITE VISIT: If only wantsVisit is missing or all fields done, ask:
+   "Kya aap site visit ke liye taiyaar hain? Hum jald arrange kar lenge!"
 
-8. DATA COLLECTED: If all data including name is collected and user agrees to site visit, confirm: "Dhanyavaad! Aapki saari jankari mil gayi. Hamari team jald hi aapko contact karegi site visit ke liye. Aapka din shubh ho!"
+8. REDIRECT: For unrelated questions:
+   "Main sirf property related madad kar sakta hoon. Kya aap apni requirements share karenge?"
 
-9. NEVER LOOP: If the user's response is just "yes", "haan", "ok", and the bot recently asked about site visit, assume agreement and move to closing. Do not repeat the same question.
+9. NO LOOP: If user said "haan/ok/yes/ready" and site visit was asked, close the conversation gracefully.
+
+10. CONTEXT AWARE: You have full conversation history. Use it — do not ask for information already provided.
 `;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -149,7 +160,7 @@ CRITICAL RULES – FOLLOW EXACTLY:
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      max_tokens: 200,  // slightly increased for richer replies
+      max_tokens: 200,
       temperature: 0.7,
     });
 

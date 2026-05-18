@@ -39,16 +39,14 @@ export const handleVerification = (req: Request, res: Response): void => {
   res.status(403).json({ error: "Forbidden" });
 };
 
-// ========== Pure Helpers (reduce cognitive complexity) ==========
+// ========== Pure Helpers ==========
 
-/** Extract user‑readable text from any supported message type */
 const getUserText = (msg: IncomingMessage): string => {
   if (msg.type === "text") return msg.text?.body ?? "";
   if (msg.type === "interactive") return msg.interactive?.button_reply?.title ?? "";
   return "";
 };
 
-/** Build a flat update payload from extracted data */
 const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
   if (extracted.name) data.name = extracted.name;
@@ -61,7 +59,6 @@ const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> 
   return data;
 };
 
-/** Compute which required fields are still missing */
 const getMissingFields = (lead: Record<string, unknown>) => {
   const required = [
     "propertyType",
@@ -75,7 +72,6 @@ const getMissingFields = (lead: Record<string, unknown>) => {
   return required.filter((f) => !lead[f]);
 };
 
-/** Map missing fields to conversation states */
 const fieldToState: Record<string, ConversationState> = {
   propertyType: ConversationState.ASK_PROPERTY_TYPE,
   budget: ConversationState.ASK_BUDGET,
@@ -86,7 +82,6 @@ const fieldToState: Record<string, ConversationState> = {
   name: ConversationState.ASK_NAME,
 };
 
-/** Determine next conversation state based on missing data */
 const computeNewState = (
   currentState: ConversationState,
   missingFields: string[],
@@ -101,7 +96,6 @@ const computeNewState = (
 
 // ========== POST — Incoming Messages ==========
 export const handleIncoming = async (req: Request, res: Response): Promise<void> => {
-  // Meta expects a quick 200 OK, otherwise it will retry
   res.status(200).json({ status: "ok" });
 
   try {
@@ -130,17 +124,17 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // 3. Prepare conversation history (without current message)
+    // 3. Conversation history
     const history = await getConversationHistory(conversation.id);
     const historyForOpenAI = history.map((msg) => ({
       role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
       content: msg.content,
     }));
 
-    // 4. Extract lead data (using current message + history)
+    // 4. Extract lead data
     const extracted = await extractLeadData(userText, historyForOpenAI);
 
-    // ===== MANUAL INTENT DETECTION for site visit agreement (breaks the loop) =====
+    // 5. Manual intent detection for site visit
     if (
       conversation.state === ConversationState.ASK_SITE_VISIT ||
       conversation.state === ConversationState.COMPLETED
@@ -150,49 +144,59 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
         "haan", "ha", "yes", "haan ji", "hanji", "ok", "okay", "ready",
         "ready hu", "ready hai", "taiyar hai", "taiyar hu", "chalo", "chaliye",
         "abhi karte hain", "bilkul", "theek hai", "sahi hai", "ji haan",
-        "i am ready", "let's go", "sure", "confirmed", "done", "chalega"
+        "i am ready", "let's go", "sure", "confirmed", "done", "chalega",
+        "ham ready", "hum ready",
       ];
-      if (affirmativePatterns.some(pattern => lowerMsg.includes(pattern))) {
+      if (affirmativePatterns.some((pattern) => lowerMsg.includes(pattern))) {
         extracted.wantsVisit = true;
       }
     }
 
-    // 5. Save user message
+    // 6. Save user message
     await saveMessage(conversation.id, MessageRole.USER, userText);
 
-    // 6. Update lead if any data extracted
+    // 7. Update lead if data extracted
     const updateData = buildUpdateData(extracted);
     if (Object.keys(updateData).length > 0) {
       await updateLead(phone, updateData);
     }
 
-    // 7. Compute missing fields and new state
-    const updatedLead = { ...lead, ...updateData };
-    const missingFields = getMissingFields(updatedLead);
+    // 8. Merge DB lead + new extracted data properly
+    const mergedLead = {
+      propertyType: (updateData.propertyType ?? lead.propertyType) as string | null,
+      budget: (updateData.budget ?? lead.budget) as string | null,
+      location: (updateData.location ?? lead.location) as string | null,
+      bhk: (updateData.bhk ?? lead.bhk) as string | null,
+      purpose: (updateData.purpose ?? lead.purpose) as string | null,
+      timeline: (updateData.timeline ?? lead.timeline) as string | null,
+      name: (updateData.name ?? lead.name) as string | null,
+    };
+
+    const missingFields = getMissingFields(mergedLead);
     const newState = computeNewState(conversation.state, missingFields, extracted.wantsVisit);
 
-    // 8. Persist new state & maybe status
+    // 9. Persist state & status
     if (newState === ConversationState.COMPLETED && missingFields.length === 0) {
       await updateLeadStatus(phone, LeadStatus.SITE_VISIT_SCHEDULED);
     }
     await updateConversationState(conversation.id, newState);
 
-    // 9. Generate reply
+    // 10. Generate reply — pass latest user message in history
     const reply = await generateReply(
       missingFields,
       {
-        name: updatedLead.name ?? undefined,
-        propertyType: updatedLead.propertyType ?? undefined,
-        budget: updatedLead.budget ?? undefined,
-        location: updatedLead.location ?? undefined,
-        bhk: updatedLead.bhk ?? undefined,
-        purpose: updatedLead.purpose ?? undefined,
-        timeline: updatedLead.timeline ?? undefined,
+        name: mergedLead.name ?? undefined,
+        propertyType: mergedLead.propertyType as any ?? undefined,
+        budget: mergedLead.budget ?? undefined,
+        location: mergedLead.location ?? undefined,
+        bhk: mergedLead.bhk ?? undefined,
+        purpose: mergedLead.purpose as any ?? undefined,
+        timeline: mergedLead.timeline as any ?? undefined,
       },
-      historyForOpenAI
+      [...historyForOpenAI, { role: "user" as const, content: userText }]
     );
 
-    // 10. Send reply, then save if sent
+    // 11. Send reply then save
     const isSent = await sendTextMessage(phone, reply);
     if (isSent) {
       await saveMessage(conversation.id, MessageRole.BOT, reply);
