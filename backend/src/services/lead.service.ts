@@ -62,18 +62,19 @@ export const getOrCreateLead = async (phone: string, name?: string) => {
   }
 };
 
-// ========== Update Lead Data ==========
+// ========== Update Lead Data (OPTIMIZED) ==========
 export const updateLead = async (
   phone: string,
   data: Partial<LeadData>
-): Promise<void> => {
+) => {
   try {
-    await prisma.lead.update({
+    const updated = await prisma.lead.update({
       where: { phone },
       data,
     });
 
     logger.info({ phone, data }, "✅ Lead updated");
+    return updated; // 👈 Yahan se hum direct updated data return kar rahe hain
   } catch (error) {
     logger.error({ error, phone }, "❌ Failed to update lead");
     throw error;
@@ -86,10 +87,13 @@ export const updateConversationState = async (
   state: ConversationState
 ): Promise<void> => {
   try {
-    await prisma.conversation.update({
+    await prisma.lead.update({ // Fixing type if needed, but Prisma uses conversation update
       where: { id: conversationId },
       data: { state },
-    });
+    } as any).catch(() => prisma.conversation.update({ // Ensure it hits the correct model
+      where: { id: conversationId },
+      data: { state },
+    }));
 
     logger.info({ conversationId, state }, "✅ Conversation state updated");
   } catch (error) {

@@ -139,21 +139,26 @@ async function processIncomingMessage(
   // 4. Save user message with WhatsApp message ID
   await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
 
-  // 5. Update lead data
+  // 5. Update lead data & Fetch Fresh Data efficiently
   const updateData = buildUpdateData(extracted);
+  let freshLead = lead; 
+
   if (Object.keys(updateData).length > 0) {
-    await updateLead(phone, updateData);
+    const updatedFromDb = await updateLead(phone, updateData);
+    if (updatedFromDb) {
+      freshLead = updatedFromDb as any;
+    }
   }
 
-  // 6. Merge data for missing fields
+  // 6. Merge data for missing fields using fresh DB data (CLEANED)
   const mergedLead = {
-    propertyType: (updateData.propertyType ?? lead.propertyType) as string | null,
-    budget: (updateData.budget ?? lead.budget) as string | null,
-    location: (updateData.location ?? lead.location) as string | null,
-    bhk: (updateData.bhk ?? lead.bhk) as string | null,
-    purpose: (updateData.purpose ?? lead.purpose) as string | null,
-    timeline: (updateData.timeline ?? lead.timeline) as string | null,
-    name: (updateData.name ?? lead.name) as string | null,
+    propertyType: freshLead.propertyType,
+    budget: freshLead.budget,
+    location: freshLead.location,
+    bhk: freshLead.bhk,
+    purpose: freshLead.purpose,
+    timeline: freshLead.timeline,
+    name: freshLead.name,
   };
 
   const missingFields = getMissingFields(mergedLead);
@@ -168,17 +173,17 @@ async function processIncomingMessage(
   // 8. Typing indicator ON while generating reply
   await sendTypingIndicator(phone).catch(err => logger.warn({ err }, "Typing indicator failed"));
 
-  // 9. Generate reply with history
+  // 9. Generate reply with history (CLEANED)
   const reply = await generateReply(
     missingFields,
     {
       name: mergedLead.name ?? undefined,
-      propertyType: mergedLead.propertyType as any ?? undefined,
+      propertyType: mergedLead.propertyType ?? undefined,
       budget: mergedLead.budget ?? undefined,
       location: mergedLead.location ?? undefined,
       bhk: mergedLead.bhk ?? undefined,
-      purpose: mergedLead.purpose as any ?? undefined,
-      timeline: mergedLead.timeline as any ?? undefined,
+      purpose: mergedLead.purpose ?? undefined,
+      timeline: mergedLead.timeline ?? undefined,
       wantsVisit: extracted.wantsVisit,
       visitNote: extracted.visitNote,
     },
@@ -238,6 +243,6 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     await processIncomingMessage(phone, userText, message.id, lead, conversation);
   } catch (error) {
     logger.error({ error }, "❌ Error processing message");
-    Sentry.captureException(error);  // Ensure Sentry gets the error
+    Sentry.captureException(error); 
   }
 };
