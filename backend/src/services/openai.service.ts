@@ -20,66 +20,47 @@ export interface ExtractedLeadData {
   visitNote?: string;
 }
 
-// ========== Intent Classifier (pre-LLM guard) ==========
-export const isPropertyRelated = async (message: string): Promise<boolean> => {
-  if (!openai) return true; // allow all if no OpenAI
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Classify if the user message is about real estate (buying, selling, renting property, flats, apartments, plots, commercial shops, site visits, budgets, locations, BHK, property investment, etc.) in Ranchi. Reply ONLY with "YES" or "NO".`,
-        },
-        { role: "user", content: message },
-      ],
-      max_tokens: 3,
-      temperature: 0,
-    });
-
-    const answer = response.choices[0]?.message?.content?.trim().toUpperCase();
-    return answer === "YES";
-  } catch (error) {
-    logger.error({ error }, "Intent classifier failed, allowing message");
-    return true;
-  }
-};
-
-// ========== Enhanced Extraction Prompt (anti-hallucination) ==========
+// ========== Enhanced Extraction Prompt ==========
 const EXTRACTION_SYSTEM_PROMPT = `
 You are a data extraction assistant for a real estate business in Ranchi, Jharkhand, India.
-Your ONLY job is to extract structured data from user messages.
+Your ONLY job is to extract structured data from the CURRENT user message.
 
-Extract the following fields IF AND ONLY IF they are explicitly mentioned in the current message:
+Extract the following fields IF AND ONLY IF they are explicitly mentioned in the CURRENT message:
 - name: User's name
 - propertyType: One of APARTMENT, VILLA, PLOT, COMMERCIAL
-- budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L")
+- budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L"). Convert "50 lakh" to "50L".
 - location: Area/locality in Ranchi they prefer
-- bhk: BHK preference (e.g., "1BHK", "2BHK", "3BHK")
+- bhk: BHK preference (e.g., "1BHK", "2BHK", "3BHK"). "2 bedroom" = "2BHK"
 - purpose: INVESTMENT or END_USE
 - timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS
 - wantsVisit: true if user wants to schedule a site visit
+- visitNote: any condition about site visit
 
-CRITICAL RULE: NEVER GUESS, INFER, OR ASSUME ANY VALUE. If a field is not mentioned, OMIT it completely.
+CRITICAL RULES:
+- NEVER GUESS, INFER, OR ASSUME ANY VALUE
+- ONLY extract what is EXPLICITLY written in the CURRENT message
+- If a field is not mentioned, OMIT it completely
+- Do NOT extract data from conversation history
+
+Mappings:
 - "ghar", "flat", "makan" → APARTMENT
 - "zameen", "plot" → PLOT
 - "shop", "commercial shop", "office" → COMMERCIAL
-- "invest karna hai", "invest" → INVESTMENT
-- "rehna hai", "khud ke liye" → END_USE
-- "15 din", "jaldi", "turant" → ONE_MONTH
-- "2 mahine", "teen mahine" → THREE_MONTHS
-- "6 mahine" → SIX_MONTHS
-- "baad mein", "flexible" → MORE_THAN_SIX_MONTHS
-- For wantsVisit: "haan", "ready hu", "taiyar hai", "yes", "ok" → true
+- "invest karna hai", "investment ke liye" → INVESTMENT
+- "rehna hai", "khud ke liye", "end use" → END_USE
+- "15 din", "jaldi", "turant", "1 mahina" → ONE_MONTH
+- "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS
+- "6 mahine", "chhah mahine" → SIX_MONTHS
+- "baad mein", "koi jaldi nahi", "flexible" → MORE_THAN_SIX_MONTHS
+- "haan", "ready hu", "taiyar hai", "yes", "ok", "bilkul" → wantsVisit: true
 
-Return ONLY valid JSON, no explanation.
+Return ONLY valid JSON, no explanation, no markdown.
 `;
 
-// ========== Extract Lead Data (no history) ==========
+// ========== Extract Lead Data ==========
 export const extractLeadData = async (
   userMessage: string,
-  _conversationHistory: { role: string; content: string }[] // ignored now
+  conversationHistory: { role: string; content: string }[]
 ): Promise<ExtractedLeadData> => {
   if (!openai) {
     logger.warn("⚠️ OpenAI not configured — skipping extraction");
@@ -89,7 +70,12 @@ export const extractLeadData = async (
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-      { role: "user", content: userMessage }, // only current message
+      // Include last 3 messages for context — but extract only from current
+      ...conversationHistory.slice(-3).map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+      { role: "user", content: userMessage },
     ];
 
     const response = await openai.chat.completions.create({
@@ -112,35 +98,59 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply (strict domain guard) ==========
+// ========== Generate Bot Reply ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
-  _conversationHistory: { role: string; content: string }[]
+  conversationHistory: { role: string; content: string }[]
 ): Promise<string> => {
   if (!openai) {
     return getDefaultReply(missingFields);
   }
 
   try {
+    const lastUserMessage = conversationHistory
+  .findLast((msg) => msg.role === "user")?.content ?? "";
+
     const systemPrompt = `
-You are a strict real estate assistant. You ONLY discuss properties (apartments, villas, plots, commercial shops) in Ranchi.
+You are a friendly, polite real estate assistant for a property business in Ranchi, Jharkhand, India.
+Help customers find their perfect property like a trusted family advisor.
 
-Current lead data: ${JSON.stringify(leadData, null, 2)}
-Missing info: ${missingFields.join(", ")}
+Current lead data collected:
+${JSON.stringify(leadData, null, 2)}
 
-HARD RULES:
-1. DOMAIN: If the user asks about weather, sports, politics, jokes, or anything not related to property, reply EXACTLY: "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?" Never answer off-topic.
-2. LANGUAGE: Mirror user's language (Hinglish, Hindi, English).
-3. NO ASSUMPTIONS: Only use lead data values if user explicitly mentioned them. Never guess.
-4. PROACTIVE: Ask for max 2 missing fields at a time. End every reply with a question.
-5. TONE: Polite, professional, friendly. Use "Sir/Ma'am" or "ji". Never rude.
-6. COMPLETION: Only offer site visit when ALL fields are present.
+Missing information: ${missingFields.length > 0 ? missingFields.join(", ") : "Nothing — all data collected!"}
+
+USER'S LAST MESSAGE: "${lastUserMessage}"
+
+STRICT LANGUAGE RULE:
+- If last message is in Devanagari (Hindi) → reply in Hindi only
+- If last message is in English only → reply in English only
+- If last message is Hinglish → reply in Hinglish
+- Default: Hinglish
+
+DOMAIN RULE:
+- ONLY discuss real estate — apartments, villas, plots, commercial shops, site visits
+- For weather, sports, jokes, or anything unrelated → reply EXACTLY:
+  "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?"
+
+OTHER RULES:
+1. Warm, polite tone — use "ji", "Sir/Ma'am" when appropriate
+2. Never repeat same question — rephrase if needed
+3. Ask max 2 missing fields at a time
+4. Keep responses short — 1-3 lines only
+5. Never ask for info user already provided
+6. If all data collected → confirm and offer site visit
+7. If user says "haan/ok/yes/ready" after site visit question → close gracefully:
+   "Shukriya ${leadData.name ? leadData.name + " ji" : ""}! Hamari team jald contact karegi. Aapka din shubh ho! 🙏"
 `;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
-      // we can include the last user message for context, but not full history
+      ...conversationHistory.map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
     ];
 
     const response = await openai.chat.completions.create({
@@ -161,7 +171,7 @@ HARD RULES:
   }
 };
 
-// ========== Default Reply (unchanged) ==========
+// ========== Default Reply (OpenAI unavailable) ==========
 const getDefaultReply = (missingFields: string[]): string => {
   const fieldMessages: Record<string, string> = {
     propertyType: "Aap kaunsi property dekhna chahte hain? Flat, Plot, Villa ya Commercial?",

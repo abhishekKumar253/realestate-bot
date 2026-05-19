@@ -10,15 +10,15 @@ import {
   updateLead,
   updateConversationState,
   saveMessage,
+  getConversationHistory,
   updateLeadStatus,
 } from "../services/lead.service";
 import {
   extractLeadData,
   generateReply,
-  isPropertyRelated,
   type ExtractedLeadData,
 } from "../services/openai.service";
-import { sendTextMessage, markAsRead, sendTypingIndicator } from "../services/whatsapp.service";
+import { sendTextMessage, markAsRead } from "../services/whatsapp.service";
 import logger from "../utils/logger";
 import { env } from "../config/index";
 import type { WhatsAppWebhookPayload, IncomingMessage } from "../types/whatsapp.types";
@@ -56,7 +56,6 @@ const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> 
   if (extracted.bhk) data.bhk = extracted.bhk;
   if (extracted.purpose) data.purpose = extracted.purpose;
   if (extracted.timeline) data.timeline = extracted.timeline;
-  if (extracted.visitNote) data.visitNote = extracted.visitNote;
   return data;
 };
 
@@ -95,17 +94,25 @@ const computeNewState = (
     : currentState;
 };
 
-// ========== Core message processing (reduces complexity of handleIncoming) ==========
+// ========== Core Message Processing ==========
 async function processIncomingMessage(
   phone: string,
   userText: string,
+  whatsappMessageId: string,
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   conversation: NonNullable<Awaited<ReturnType<typeof getOrCreateLead>>["conversations"][0]>
 ): Promise<void> {
-  // 1. Extract lead data (no history)
-  const extracted = await extractLeadData(userText, []);
+  // 1. Get conversation history
+  const history = await getConversationHistory(conversation.id);
+  const historyForOpenAI = history.map((msg) => ({
+    role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
+    content: msg.content,
+  }));
 
-  // 2. Manual site-visit intent detection
+  // 2. Extract lead data with history
+  const extracted = await extractLeadData(userText, historyForOpenAI);
+
+  // 3. Manual site-visit intent detection
   if (
     conversation.state === ConversationState.ASK_SITE_VISIT ||
     conversation.state === ConversationState.COMPLETED
@@ -118,21 +125,21 @@ async function processIncomingMessage(
       "i am ready", "let's go", "sure", "confirmed", "done", "chalega",
       "ham ready", "hum ready",
     ];
-    if (affirmativePatterns.some(pattern => lowerMsg.includes(pattern))) {
+    if (affirmativePatterns.some((pattern) => lowerMsg.includes(pattern))) {
       extracted.wantsVisit = true;
     }
   }
 
-  // 3. Save user message
-  await saveMessage(conversation.id, MessageRole.USER, userText);
+  // 4. Save user message with WhatsApp message ID
+  await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
 
-  // 4. Update lead data
+  // 5. Update lead data
   const updateData = buildUpdateData(extracted);
   if (Object.keys(updateData).length > 0) {
     await updateLead(phone, updateData);
   }
 
-  // 5. Merge data for missing fields
+  // 6. Merge data for missing fields
   const mergedLead = {
     propertyType: (updateData.propertyType ?? lead.propertyType) as string | null,
     budget: (updateData.budget ?? lead.budget) as string | null,
@@ -146,13 +153,13 @@ async function processIncomingMessage(
   const missingFields = getMissingFields(mergedLead);
   const newState = computeNewState(conversation.state, missingFields, extracted.wantsVisit);
 
-  // 6. Update conversation state & lead status
+  // 7. Update conversation state & lead status
   if (newState === ConversationState.COMPLETED && missingFields.length === 0) {
     await updateLeadStatus(phone, LeadStatus.SITE_VISIT_SCHEDULED);
   }
   await updateConversationState(conversation.id, newState);
 
-  // 7. Generate reply
+  // 8. Generate reply with history
   const reply = await generateReply(
     missingFields,
     {
@@ -164,10 +171,10 @@ async function processIncomingMessage(
       purpose: mergedLead.purpose as any ?? undefined,
       timeline: mergedLead.timeline as any ?? undefined,
     },
-    []
+    [...historyForOpenAI, { role: "user" as const, content: userText }]
   );
 
-  // 8. Send reply & save
+  // 9. Send reply & save
   const isSent = await sendTextMessage(phone, reply);
   if (isSent) {
     await saveMessage(conversation.id, MessageRole.BOT, reply);
@@ -192,26 +199,22 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // Duplicate check
-    const existingMsg = await prisma.message.findUnique({ where: { id: message.id } });
+    // Duplicate check using WhatsApp message ID
+    const existingMsg = await prisma.message.findUnique({
+      where: { whatsappMessageId: message.id },
+    });
     if (existingMsg) {
-      logger.info("Duplicate message, skipping");
+      logger.info({ messageId: message.id }, "⚠️ Duplicate message, skipping");
       return;
     }
 
     const contactName = extractContactName(body) ?? undefined;
     logger.info({ phone, message: userText }, "📩 Incoming message");
 
-    // Typing indicator & read receipt
-    await sendTypingIndicator(phone).catch(err => logger.warn({ err }, "Typing indicator failed"));
-    await markAsRead(message.id).catch(err => logger.warn({ err }, "Mark as read failed"));
-
-    // Domain guard
-    const allowed = await isPropertyRelated(userText);
-    if (!allowed) {
-      await sendTextMessage(phone, "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?");
-      return;
-    }
+    // Mark as read
+    await markAsRead(message.id).catch((err) =>
+      logger.warn({ err }, "Mark as read failed")
+    );
 
     // Get or create lead
     const lead = await getOrCreateLead(phone, contactName);
@@ -221,9 +224,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Delegate to helper function (reduces cognitive complexity)
-    await processIncomingMessage(phone, userText, lead, conversation);
-
+    await processIncomingMessage(phone, userText, message.id, lead, conversation);
   } catch (error) {
     logger.error({ error }, "❌ Error processing message");
   }

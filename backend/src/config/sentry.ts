@@ -1,4 +1,3 @@
-// src/config/sentry.ts
 import * as Sentry from "@sentry/node";
 import { env } from "./index";
 import logger from "../utils/logger";
