@@ -72,7 +72,6 @@ export const extractLeadData = async (
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-      // Include last 3 messages for context — but extract only from current
       ...conversationHistory.slice(-3).map((msg) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,

@@ -71,7 +71,6 @@ export interface SendMessagePayload {
   };
 }
 
-// ========== Express Request Extension ==========
 declare module "express" {
   interface Request {
     rawBody?: string;

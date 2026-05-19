@@ -10,7 +10,6 @@ import webhookRouter from "./routes/webhook.route";
 
 const app = express();
 
-// ========== Middlewares ==========
 app.use(helmet());
 app.use(
   express.json({
@@ -21,7 +20,6 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-// ========== Rate Limiting ==========
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -34,10 +32,8 @@ const webhookLimiter = rateLimit({
   message: "Too many requests, please try again later.",
 });
 
-// ========== Routes ==========
 app.use("/webhook", webhookLimiter, webhookRouter);
 
-// ========== Health Check ==========
 app.get("/health", generalLimiter, (_req, res) => {
   res.status(200).json({
     status: "ok",
@@ -47,7 +43,6 @@ app.get("/health", generalLimiter, (_req, res) => {
 });
 
 
-// ========== Global Error Handler ==========
 app.use(
   async (
     err: Error,
@@ -55,22 +50,16 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    // Log immediately
     logger.error({ err }, "Unhandled error");
 
-    // Capture and flush Sentry BEFORE sending response
     if (env.SENTRY_DSN) {
       Sentry.captureException(err);
-      // Wait up to 3 seconds for delivery (serverless safe)
       await Sentry.flush(3000);
     }
-
-    // Send error response after Sentry event is delivered
     res.status(500).json({ error: "Internal server error" });
   }
 );
 
-// ========== Server Start ==========
 const PORT = Number.parseInt(env.PORT, 10) || 5000;
 
 const start = async () => {
