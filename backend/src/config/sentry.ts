@@ -20,7 +20,7 @@ if (env.SENTRY_DSN) {
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
   });
-  console.log("✅ Sentry initialized");
+  console.log("✅ Sentry initialized"); 
 } else {
   console.warn("⚠️ SENTRY_DSN not set");
 }
