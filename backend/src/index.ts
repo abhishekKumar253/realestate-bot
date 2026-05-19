@@ -64,8 +64,8 @@ app.use(
   }
 );
 
-app.get("/test-sentry", (_req, _res) => {
-  throw new Error("Sentry test error");
+app.get("/debug-sentry", (_req, _res) => {
+  throw new Error("My first Sentry error!");
 });
 
 // ========== Server Start ==========
