@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { MessageRole, ConversationState, LeadStatus } from "@prisma/client";
+import * as Sentry from "@sentry/node";
 import {
   extractMessage,
   extractContactName,
@@ -18,7 +19,7 @@ import {
   generateReply,
   type ExtractedLeadData,
 } from "../services/openai.service";
-import { sendTextMessage, markAsRead } from "../services/whatsapp.service";
+import { sendTextMessage, markAsRead, sendTypingIndicator } from "../services/whatsapp.service";
 import logger from "../utils/logger";
 import { env } from "../config/index";
 import type { WhatsAppWebhookPayload, IncomingMessage } from "../types/whatsapp.types";
@@ -88,9 +89,7 @@ const computeNewState = (
   wantsVisit?: boolean
 ): ConversationState => {
   if (missingFields.length === 0 && wantsVisit) return ConversationState.COMPLETED;
-
   if (missingFields.length === 0) return ConversationState.ASK_SITE_VISIT;
-
   const firstMissing = missingFields[0];
   return firstMissing && fieldToState[firstMissing]
     ? fieldToState[firstMissing]
@@ -162,7 +161,10 @@ async function processIncomingMessage(
   }
   await updateConversationState(conversation.id, newState);
 
-  // 8. Generate reply with history
+  // 8. Typing indicator ON while generating reply
+  await sendTypingIndicator(phone).catch(err => logger.warn({ err }, "Typing indicator failed"));
+
+  // 9. Generate reply with history
   const reply = await generateReply(
     missingFields,
     {
@@ -177,7 +179,7 @@ async function processIncomingMessage(
     [...historyForOpenAI, { role: "user" as const, content: userText }]
   );
 
-  // 9. Send reply & save
+  // 10. Send reply & save
   const isSent = await sendTextMessage(phone, reply);
   if (isSent) {
     await saveMessage(conversation.id, MessageRole.BOT, reply);
@@ -215,7 +217,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     logger.info({ phone, message: userText }, "📩 Incoming message");
 
     // Mark as read
-    await markAsRead(message.id).catch((err) =>
+    await markAsRead(message.id).catch(err =>
       logger.warn({ err }, "Mark as read failed")
     );
 
@@ -230,5 +232,6 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     await processIncomingMessage(phone, userText, message.id, lead, conversation);
   } catch (error) {
     logger.error({ error }, "❌ Error processing message");
+    Sentry.captureException(error);  // Ensure Sentry gets the error
   }
 };
