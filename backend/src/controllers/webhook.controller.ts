@@ -179,6 +179,8 @@ async function processIncomingMessage(
       bhk: mergedLead.bhk ?? undefined,
       purpose: mergedLead.purpose as any ?? undefined,
       timeline: mergedLead.timeline as any ?? undefined,
+      wantsVisit: extracted.wantsVisit,
+      visitNote: extracted.visitNote,
     },
     [...historyForOpenAI, { role: "user" as const, content: userText }]
   );
