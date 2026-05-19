@@ -46,10 +46,6 @@ app.get("/health", generalLimiter, (_req, res) => {
   });
 });
 
-// ========== Temporary Sentry Test Route ==========
-app.get("/debug-sentry", (_req, _res) => {
-  throw new Error("SENTRY_GUARANTEED_TEST_ERROR");
-});
 
 // ========== Global Error Handler ==========
 app.use(
