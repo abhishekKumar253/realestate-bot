@@ -87,7 +87,10 @@ const computeNewState = (
   missingFields: string[],
   wantsVisit?: boolean
 ): ConversationState => {
-  if (missingFields.length === 0 || wantsVisit) return ConversationState.COMPLETED;
+  if (missingFields.length === 0 && wantsVisit) return ConversationState.COMPLETED;
+
+  if (missingFields.length === 0) return ConversationState.ASK_SITE_VISIT;
+
   const firstMissing = missingFields[0];
   return firstMissing && fieldToState[firstMissing]
     ? fieldToState[firstMissing]
