@@ -64,6 +64,10 @@ app.use(
   }
 );
 
+app.get("/test-sentry", (_req, _res) => {
+  throw new Error("Sentry test error");
+});
+
 // ========== Server Start ==========
 const PORT = Number.parseInt(env.PORT, 10) || 5000;
 
