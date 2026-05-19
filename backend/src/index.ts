@@ -53,13 +53,16 @@ app.get("/health", generalLimiter, (_req, res) => {
 
 // ========== Global Error Handler ==========
 app.use(
-  (
+  async (  
     err: Error,
     _req: express.Request,
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    Sentry.captureException(err);
+    if (env.SENTRY_DSN) {
+      Sentry.captureException(err);
+      await Sentry.flush(2000); 
+    }
     logger.error({ err }, "Unhandled error");
     res.status(500).json({ error: "Internal server error" });
   }
