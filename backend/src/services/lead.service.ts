@@ -74,7 +74,7 @@ export const updateLead = async (
     });
 
     logger.info({ phone, data }, "✅ Lead updated");
-    return updated; // 👈 Yahan se hum direct updated data return kar rahe hain
+    return updated; 
   } catch (error) {
     logger.error({ error, phone }, "❌ Failed to update lead");
     throw error;
@@ -87,13 +87,10 @@ export const updateConversationState = async (
   state: ConversationState
 ): Promise<void> => {
   try {
-    await prisma.lead.update({ // Fixing type if needed, but Prisma uses conversation update
+    await prisma.conversation.update({
       where: { id: conversationId },
       data: { state },
-    } as any).catch(() => prisma.conversation.update({ // Ensure it hits the correct model
-      where: { id: conversationId },
-      data: { state },
-    }));
+    });
 
     logger.info({ conversationId, state }, "✅ Conversation state updated");
   } catch (error) {
@@ -102,12 +99,12 @@ export const updateConversationState = async (
   }
 };
 
-// ========== Save Message (UPDATED) ==========
+// ========== Save Message (UPDATED – race‑condition proof) ==========
 export const saveMessage = async (
   conversationId: string,
   role: MessageRole,
   content: string,
-  whatsappMessageId?: string   // ✅ optional WhatsApp message ID for deduplication
+  whatsappMessageId?: string
 ): Promise<void> => {
   try {
     await prisma.message.create({
@@ -115,10 +112,14 @@ export const saveMessage = async (
         conversationId,
         role,
         content,
-        whatsappMessageId: whatsappMessageId ?? null,   // store if provided
+        whatsappMessageId: whatsappMessageId ?? null,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2002' && error?.meta?.target?.includes('whatsappMessageId')) {
+      logger.warn({ whatsappMessageId }, "⚠️ Duplicate message skipped (race condition)");
+      return;
+    }
     logger.error({ error, conversationId }, "❌ Failed to save message");
     throw error;
   }
