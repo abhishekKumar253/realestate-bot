@@ -47,21 +47,9 @@ app.get("/health", generalLimiter, (_req, res) => {
 });
 
 // ========== Sentry Error Handler ==========
-// ========== Global Error Handler ==========
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    // ✅ Ye line add kar yahan:
-    Sentry.captureException(err);
-    
-    logger.error({ err }, "Unhandled error");
-    res.status(500).json({ error: "Internal server error" });
-  }
-);
+// if (env.SENTRY_DSN) {
+//   Sentry.setupExpressErrorHandler(app);
+// }
 
 // ========== Global Error Handler ==========
 app.use(
@@ -71,6 +59,7 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
+    Sentry.captureException(err);
     logger.error({ err }, "Unhandled error");
     res.status(500).json({ error: "Internal server error" });
   }
