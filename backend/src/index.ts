@@ -46,31 +46,33 @@ app.get("/health", generalLimiter, (_req, res) => {
   });
 });
 
-// ========== Sentry Error Handler ==========
-// if (env.SENTRY_DSN) {
-//   Sentry.setupExpressErrorHandler(app);
-// }
+// ========== Temporary Sentry Test Route ==========
+app.get("/debug-sentry", (_req, _res) => {
+  throw new Error("SENTRY_GUARANTEED_TEST_ERROR");
+});
 
 // ========== Global Error Handler ==========
 app.use(
-  async (  
+  async (
     err: Error,
     _req: express.Request,
     res: express.Response,
     _next: express.NextFunction
   ) => {
+    // Log immediately
+    logger.error({ err }, "Unhandled error");
+
+    // Capture and flush Sentry BEFORE sending response
     if (env.SENTRY_DSN) {
       Sentry.captureException(err);
-      await Sentry.flush(2000); 
+      // Wait up to 3 seconds for delivery (serverless safe)
+      await Sentry.flush(3000);
     }
-    logger.error({ err }, "Unhandled error");
+
+    // Send error response after Sentry event is delivered
     res.status(500).json({ error: "Internal server error" });
   }
 );
-
-app.get("/debug-sentry", (_req, _res) => {
-  throw new Error("My first Sentry error!");
-});
 
 // ========== Server Start ==========
 const PORT = Number.parseInt(env.PORT, 10) || 5000;
@@ -85,7 +87,10 @@ const start = async () => {
     });
   } catch (error) {
     logger.error({ error }, "❌ Failed to start server");
-    if (env.SENTRY_DSN) Sentry.captureException(error);
+    if (env.SENTRY_DSN) {
+      Sentry.captureException(error);
+      await Sentry.flush(3000);
+    }
     process.exit(1);
   }
 };

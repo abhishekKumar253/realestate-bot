@@ -1,26 +1,20 @@
-// import * as Sentry from "@sentry/node";
-// import { nodeProfilingIntegration } from "@sentry/profiling-node";
-// import { env } from "./index";
-
-// if (env.SENTRY_DSN) {
-//   Sentry.init({
-//     dsn: env.SENTRY_DSN,
-//     integrations: [nodeProfilingIntegration()],
-//     tracesSampleRate: env.NODE_ENV === "production" ? 0.2 : 1,
-//     profilesSampleRate: 1,
-//     environment: env.NODE_ENV,
-//   });
-// }
-
+// src/config/sentry.ts
 import * as Sentry from "@sentry/node";
 import { env } from "./index";
+import logger from "../utils/logger";
 
 if (env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: env.SENTRY_DSN,
-    environment: env.NODE_ENV,
-  });
-  console.log("✅ Sentry initialized"); 
+  try {
+    Sentry.init({
+      dsn: env.SENTRY_DSN,
+      tracesSampleRate: env.NODE_ENV === "production" ? 0.2 : 1,
+      profilesSampleRate: 1,
+      environment: env.NODE_ENV,
+    });
+    logger.info("✅ Sentry initialized successfully");
+  } catch (error) {
+    logger.error({ error }, "❌ Failed to initialize Sentry");
+  }
 } else {
-  console.warn("⚠️ SENTRY_DSN not set");
+  logger.warn("⚠️  SENTRY_DSN not set. Sentry is disabled.");
 }
