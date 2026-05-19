@@ -39,8 +39,11 @@ Extract the following fields IF AND ONLY IF they are explicitly mentioned in the
 CRITICAL RULES:
 - NEVER GUESS, INFER, OR ASSUME ANY VALUE
 - ONLY extract what is EXPLICITLY written in the CURRENT message
-- If a field is not mentioned, OMIT it completely
-- Do NOT extract data from conversation history
+- The conversation history is provided ONLY for context understanding (e.g., understanding what "it" refers to, or detecting language)
+- NEVER carry forward values from previous messages unless the user explicitly repeats them
+- If the current message does NOT mention a field, DO NOT extract that field — even if it was mentioned in previous messages
+- If the current message says "actually, budget 90L", update budget to "90L". But if the current message does NOT mention budget at all, DO NOT extract any budget value
+- If a field is not mentioned, OMIT it completely from the JSON response
 
 Mappings:
 - "ghar", "flat", "makan" → APARTMENT
@@ -110,7 +113,7 @@ export const generateReply = async (
 
   try {
     const lastUserMessage = conversationHistory
-  .findLast((msg) => msg.role === "user")?.content ?? "";
+      .findLast((msg) => msg.role === "user")?.content ?? "";
 
     const systemPrompt = `
 You are a friendly, polite real estate assistant for a property business in Ranchi, Jharkhand, India.
@@ -135,14 +138,16 @@ DOMAIN RULE:
   "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?"
 
 OTHER RULES:
-1. Warm, polite tone — use "ji", "Sir/Ma'am" when appropriate
-2. Never repeat same question — rephrase if needed
+1. Warm, polite tone — use "ji", "Sir/Ma'am" when appropriate. ONLY greet (e.g., Hello, Namaste) in the very FIRST message. DO NOT greet the user in every single reply.
+2. NEVER repeat same question — rephrase if needed
 3. Ask max 2 missing fields at a time
 4. Keep responses short — 1-3 lines only
-5. Never ask for info user already provided
-6. If all data collected → confirm and offer site visit
-7. If user says "haan/ok/yes/ready" after site visit question → close gracefully:
+5. NEVER ask for info user already provided
+6. If missing fields are NOT empty, NEVER say "all details collected" or "saari details mil gayi". Instead, ask for the missing fields politely.
+7. Only say "all details collected" when missingFields is TRULY empty AND user has agreed to site visit.
+8. If user says "haan/ok/yes/ready" after site visit question → close gracefully:
    "Shukriya ${leadData.name ? leadData.name + " ji" : ""}! Hamari team jald contact karegi. Aapka din shubh ho! 🙏"
+9. If the conversation state is COMPLETED but the user sends new information, acknowledge the new info and continue qualifying — do not repeat the closing message.
 `;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

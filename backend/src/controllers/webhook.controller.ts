@@ -88,12 +88,17 @@ const computeNewState = (
   missingFields: string[],
   wantsVisit?: boolean
 ): ConversationState => {
+  if (missingFields.length > 0) {
+    const firstMissing = missingFields[0];
+    return firstMissing && fieldToState[firstMissing]
+      ? fieldToState[firstMissing]
+      : currentState;
+  }
+
   if (missingFields.length === 0 && wantsVisit) return ConversationState.COMPLETED;
   if (missingFields.length === 0) return ConversationState.ASK_SITE_VISIT;
-  const firstMissing = missingFields[0];
-  return firstMissing && fieldToState[firstMissing]
-    ? fieldToState[firstMissing]
-    : currentState;
+
+  return currentState;
 };
 
 // ========== Core Message Processing ==========
@@ -111,7 +116,6 @@ async function processIncomingMessage(
     content: msg.content,
   }));
 
-  // 2. Extract lead data with history
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
   // 3. Manual site-visit intent detection
