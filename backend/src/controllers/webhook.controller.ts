@@ -116,6 +116,7 @@ async function processIncomingMessage(
     content: msg.content,
   }));
 
+  // 2. Extract lead data with history context
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
   // 3. Manual site-visit intent detection
@@ -136,21 +137,16 @@ async function processIncomingMessage(
     }
   }
 
-  // 4. Save user message with WhatsApp message ID
+  // 4. Save user message
   await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
 
-  // 5. Update lead data & Fetch Fresh Data efficiently
+  // 5. Update lead & get fresh data in one step
   const updateData = buildUpdateData(extracted);
-  let freshLead = lead; 
+  const freshLead = Object.keys(updateData).length > 0
+    ? await updateLead(phone, updateData)
+    : lead;
 
-  if (Object.keys(updateData).length > 0) {
-    const updatedFromDb = await updateLead(phone, updateData);
-    if (updatedFromDb) {
-      freshLead = updatedFromDb as any;
-    }
-  }
-
-  // 6. Merge data for missing fields using fresh DB data (CLEANED)
+  // 6. Compute missing fields from fresh data
   const mergedLead = {
     propertyType: freshLead.propertyType,
     budget: freshLead.budget,
@@ -170,10 +166,12 @@ async function processIncomingMessage(
   }
   await updateConversationState(conversation.id, newState);
 
-  // 8. Typing indicator ON while generating reply
-  await sendTypingIndicator(phone).catch(err => logger.warn({ err }, "Typing indicator failed"));
+  // 8. Typing indicator
+  await sendTypingIndicator(phone).catch((err) =>
+    logger.warn({ err }, "Typing indicator failed")
+  );
 
-  // 9. Generate reply with history (CLEANED)
+  // 9. Generate reply
   const reply = await generateReply(
     missingFields,
     {
@@ -215,7 +213,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // Duplicate check using WhatsApp message ID
+    // Duplicate check
     const existingMsg = await prisma.message.findUnique({
       where: { whatsappMessageId: message.id },
     });
@@ -228,7 +226,7 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     logger.info({ phone, message: userText }, "📩 Incoming message");
 
     // Mark as read
-    await markAsRead(message.id).catch(err =>
+    await markAsRead(message.id).catch((err) =>
       logger.warn({ err }, "Mark as read failed")
     );
 
@@ -243,6 +241,6 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     await processIncomingMessage(phone, userText, message.id, lead, conversation);
   } catch (error) {
     logger.error({ error }, "❌ Error processing message");
-    Sentry.captureException(error); 
+    Sentry.captureException(error);
   }
 };
