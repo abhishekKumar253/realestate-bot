@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verifySignature } from "../middlewares/webhook.middleware";
+// import { verifySignature } from "../middlewares/webhook.middleware";
 import {
   handleVerification,
   handleIncoming,
@@ -11,6 +11,6 @@ const router = Router();
 router.get("/", handleVerification);
 
 // ========== POST — Incoming Messages ==========
-router.post("/", verifySignature, handleIncoming);
+router.post("/", handleIncoming);
 
 export default router;
