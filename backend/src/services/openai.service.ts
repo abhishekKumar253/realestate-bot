@@ -48,8 +48,8 @@ Mappings:
 - "ghar", "flat", "makan" → APARTMENT
 - "zameen", "plot" → PLOT
 - "shop", "commercial shop", "office" → COMMERCIAL
-- "invest karna hai", "investment ke liye" → INVESTMENT
-- "rehna hai", "khud ke liye", "end use" → END_USE
+- "invest karna hai", "investment ke liye", "invest", "investment" → INVESTMENT
+- "rehna hai", "khud ke liye", "end use", "apna ghar", "apne parents ke liye", "family ke liye", "parivaar ke liye", "parents ke liye" → END_USE
 - "15 din", "jaldi", "turant", "1 mahina" → ONE_MONTH
 - "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS
 - "6 mahine", "chhah mahine" → SIX_MONTHS
@@ -72,7 +72,6 @@ export const extractLeadData = async (
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-      // Include last 3 messages for context — but extract only from current
       ...conversationHistory.slice(-3).map((msg) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,
