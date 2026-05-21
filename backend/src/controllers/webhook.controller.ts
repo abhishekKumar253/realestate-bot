@@ -160,11 +160,17 @@ async function processIncomingMessage(
   const missingFields = getMissingFields(mergedLead);
   const newState = computeNewState(conversation.state, missingFields, extracted.wantsVisit);
 
+  // If the conversation is already completed, we should not regress to an earlier state
+  let finalState = newState;
+  if (conversation.state === ConversationState.COMPLETED) {
+    finalState = ConversationState.COMPLETED;
+  }
+
   // 7. Update conversation state & lead status
-  if (newState === ConversationState.COMPLETED && missingFields.length === 0) {
+  if (finalState === ConversationState.COMPLETED && missingFields.length === 0) {
     await updateLeadStatus(phone, LeadStatus.SITE_VISIT_SCHEDULED);
   }
-  await updateConversationState(conversation.id, newState);
+  await updateConversationState(conversation.id, finalState);
 
   // 8. Typing indicator
   await sendTypingIndicator(phone, whatsappMessageId).catch(err => logger.warn({ err }, "Typing indicator failed"));
@@ -192,7 +198,7 @@ async function processIncomingMessage(
     await saveMessage(conversation.id, MessageRole.BOT, reply);
   }
 
-  logger.info({ phone, state: newState }, "✅ Message processed");
+  logger.info({ phone, state: finalState }, "✅ Message processed");
 }
 
 // ========== POST — Incoming Messages ==========
