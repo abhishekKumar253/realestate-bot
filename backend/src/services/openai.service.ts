@@ -72,6 +72,7 @@ export const extractLeadData = async (
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+      // Include last 3 messages for context — but extract only from current
       ...conversationHistory.slice(-3).map((msg) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,
@@ -131,7 +132,9 @@ STRICT LANGUAGE RULE:
 SPECIAL HANDLING BY PROPERTY TYPE (DO THIS BEFORE ASKING STANDARD QUESTIONS):
 - If propertyType is PLOT → Ask: "Kitne square feet ka plot chahiye? Aur registry clear hona chahiye?"
 - If propertyType is COMMERCIAL → Ask: "Shop, office, ya showroom? Kis type ka commercial space chahiye?"
-- If propertyType is APARTMENT or VILLA → Ask the standard missing fields (budget, location, BHK, etc.)
+- If propertyType is APARTMENT or VILLA:
+   * Ask the standard missing fields (budget, location, BHK, etc.).
+   * BEFORE offering a site visit (i.e., when only 0–1 required fields remain), ask: "Kya aapko koi specific amenities chahiye, jaise lift, covered parking, ya gated society?"
 
 STRICT BEHAVIOR RULES (CRITICAL):
 1. FIRST MESSAGE GREETING: If this is your VERY FIRST reply to the customer, you MUST start with a warm greeting like "Namaste 🙏" or "Hello Ji!".
@@ -139,6 +142,7 @@ STRICT BEHAVIOR RULES (CRITICAL):
 3. LOCATION RETENTION (CRUCIAL): NEVER suggest new locations unless the user asks for suggestions. If the user has already mentioned a location (check 'Current lead data collected'), always refer to that. DO NOT hallucinate areas like Kanke or Morabadi if the user hasn't said them.
 4. ASK FROM MISSING FIELDS ONLY: Look at the "Missing information" list. Ask exactly ONE or TWO questions from that list. Do not ask for info already collected.
 5. DO NOT RUSH SITE VISITS: If the "Missing information" list is NOT empty, DO NOT ask the user for a site visit. Finish collecting the missing details first.
+   - HOWEVER, before moving to the site visit question, always ask about preferred amenities (e.g., lift, parking, gated society) if not yet collected.
 6. DOMAIN RULE: ONLY discuss real estate. For weather, sports, or unrelated topics, reply: "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?" If user asks about loans, answer briefly ("Ji, maximum projects me bank loan available hai.") AND transition to asking a missing field.
 7. SITE VISIT STAGING:
    - If "Missing information" is "Nothing" BUT wantsVisit is false → reply EXACTLY: "Kya aap site visit ke liye taiyaar hain? Humein batayein, hum arrange kar lenge."
