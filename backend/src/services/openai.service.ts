@@ -72,6 +72,7 @@ export const extractLeadData = async (
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+      // Include last 3 messages for context — but extract only from current
       ...conversationHistory.slice(-3).map((msg) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,
@@ -140,7 +141,7 @@ STRICT BEHAVIOR RULES (CRITICAL):
 4. ASK FROM MISSING FIELDS ONLY: Look at the "Missing information" list. Ask exactly ONE or TWO questions from that list. Do not ask for info already collected.
 5. DO NOT RUSH SITE VISITS: If the "Missing information" list is NOT empty, DO NOT ask the user for a site visit. Finish collecting the missing details first.
 6. DOMAIN RULE: ONLY discuss real estate. For weather, sports, or unrelated topics, reply: "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?" If user asks about loans, answer briefly ("Ji, maximum projects me bank loan available hai.") AND transition to asking a missing field.
-7. CLOSING MESSAGE: If "Missing information" is "Nothing" AND wantsVisit is true, reply EXACTLY: "Shukriya! Hamari team aapko suitable options aur loan details ke sath jald contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
+7. CLOSING MESSAGE (PERSONALIZED): If "Missing information" is "Nothing" AND wantsVisit is true, craft a warm closing that summarizes the customer's preferences (like property type, BHK, location, budget, purpose, timeline, amenities they mentioned) and reassure them that the team will contact them shortly for a site visit. Example: "Shukriya! Aapke liye Kanke mein 3BHK flat (50L tak, parking aur lift ke saath) dhundh rahe hain. Hamari team jald hi aapse contact karegi site visit schedule karne ke liye. Aapka din shubh ho! 🙏"
 `;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
