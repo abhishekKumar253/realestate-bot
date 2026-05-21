@@ -166,30 +166,21 @@ export const markAsRead = async (messageId: string): Promise<boolean> => {
 };
 
 // ========== Send Typing Indicator ==========
-export const sendTypingIndicator = async (to: string): Promise<boolean> => {
+export const sendTypingIndicator = async (to: string, messageId: string): Promise<boolean> => {
   try {
     const payload = {
       messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to,
-      type: "typing_indicator",
-      typing_indicator: {
-        type: "text",
-      },
+      status: "read",
+      message_id: messageId,
+      typing_indicator: { type: "text" },
     };
 
-    await axios.post(WA_API_URL, payload, {
-      headers: getHeaders(),
-    });
-
-    logger.info({ to }, "✅ Typing indicator sent");
+    await axios.post(WA_API_URL, payload, { headers: getHeaders() });
+    logger.info({ to, messageId }, "✅ Typing indicator sent");
     return true;
   } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
-    logger.error({ error: metaError, to }, "❌ Failed to send typing indicator");
+    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    logger.error({ error: metaError, to, messageId }, "❌ Failed to send typing indicator");
     return false;
   }
 };

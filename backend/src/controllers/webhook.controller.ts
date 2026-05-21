@@ -167,9 +167,7 @@ async function processIncomingMessage(
   await updateConversationState(conversation.id, newState);
 
   // 8. Typing indicator
-  await sendTypingIndicator(phone).catch((err) =>
-    logger.warn({ err }, "Typing indicator failed")
-  );
+  await sendTypingIndicator(phone, whatsappMessageId).catch(err => logger.warn({ err }, "Typing indicator failed"));
 
   // 9. Generate reply
   const reply = await generateReply(
