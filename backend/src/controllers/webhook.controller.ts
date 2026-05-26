@@ -92,15 +92,23 @@ const fieldToState: Record<string, ConversationState> = {
 const computeNewState = (
   currentState: ConversationState,
   missingFields: string[],
-  wantsVisit?: boolean
+  wantsVisit: boolean
 ): ConversationState => {
+  if (currentState === ConversationState.COMPLETED) {
+    return ConversationState.COMPLETED;
+  }
+
   if (missingFields.length > 0) {
     const firstMissing = missingFields[0];
     return firstMissing && fieldToState[firstMissing]
       ? fieldToState[firstMissing]
       : currentState;
   }
-  if (wantsVisit) return ConversationState.COMPLETED;
+
+  if (currentState === ConversationState.ASK_SITE_VISIT && wantsVisit) {
+    return ConversationState.COMPLETED;
+  }
+
   return ConversationState.ASK_SITE_VISIT;
 };
 
@@ -113,38 +121,32 @@ async function processIncomingMessage(
   conversation: NonNullable<Awaited<ReturnType<typeof getOrCreateLead>>["conversations"][0]>,
   builder: BuilderWithToken
 ): Promise<void> {
-  // 1. Conversation history
   const history = await getConversationHistory(conversation.id);
   const historyForOpenAI = history.map((msg) => ({
     role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
     content: msg.content,
   }));
 
-  // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // 3. Manual site-visit intent detection
-  if (
-    conversation.state === ConversationState.ASK_SITE_VISIT ||
-    conversation.state === ConversationState.COMPLETED
-  ) {
+  if (conversation.state === ConversationState.ASK_SITE_VISIT) {
     const lowerMsg = userText.toLowerCase().trim();
     const affirmativePatterns = [
       "haan", "ha", "yes", "haan ji", "hanji", "ok", "okay", "ready",
       "ready hu", "ready hai", "taiyar hai", "taiyar hu", "chalo", "chaliye",
       "abhi karte hain", "bilkul", "theek hai", "sahi hai", "ji haan",
       "i am ready", "let's go", "sure", "confirmed", "done", "chalega",
-      "ham ready", "hum ready",
+      "ham ready", "hum ready", "hai taiyaar", "taiyaar h", "taiyar h",
     ];
-    if (affirmativePatterns.some((pattern) => lowerMsg.includes(pattern))) {
-      extracted.wantsVisit = true;
-    }
+    extracted.wantsVisit = affirmativePatterns.some((p) => lowerMsg.includes(p));
+  } else {
+    extracted.wantsVisit = false;
   }
 
   // 4. Save user message
   await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
 
-  // 5. Update lead — CHANGED: leadId use karo, phone nahi
+  // 5. Update lead
   const updateData = buildUpdateData(extracted);
   const freshLead = Object.keys(updateData).length > 0
     ? await updateLead(lead.id, updateData)
@@ -162,20 +164,21 @@ async function processIncomingMessage(
   };
 
   const missingFields = getMissingFields(mergedLead);
-  const newState = computeNewState(conversation.state, missingFields, extracted.wantsVisit);
+  const newState = computeNewState(
+    conversation.state,
+    missingFields,
+    extracted.wantsVisit ?? false
+  );
 
-  // Completed state se regress mat karo
-  const finalState = conversation.state === ConversationState.COMPLETED
-    ? ConversationState.COMPLETED
-    : newState;
+  const finalState = newState;
 
-  // 7. Status + state update — CHANGED: leadId use karo
+  // 7. Status + state update
   if (finalState === ConversationState.COMPLETED && missingFields.length === 0) {
     await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
   }
   await updateConversationState(conversation.id, finalState);
 
-  // 8. Typing indicator — CHANGED: builder credentials pass karo
+  // 8. Typing indicator
   await sendTypingIndicator(
     builder.phoneNumberId,
     builder.accessToken,
@@ -201,7 +204,7 @@ async function processIncomingMessage(
     builder.systemPrompt
   );
 
-  // 10. Send reply — CHANGED: builder credentials pass karo
+  // 10. Send reply
   const isSent = await sendTextMessage(builder.phoneNumberId, builder.accessToken, phone, reply);
   if (isSent) {
     await saveMessage(conversation.id, MessageRole.BOT, reply);
@@ -218,14 +221,12 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const body = req.body as WhatsAppWebhookPayload;
     if (body.object !== "whatsapp_business_account") return;
 
-    // CHANGED: phoneNumberId extract karo — builder identify karne ke liye
     const phoneNumberId = extractPhoneNumberId(body);
     if (!phoneNumberId) {
       logger.warn("No phone_number_id in webhook");
       return;
     }
 
-    // CHANGED: Builder lookup with decrypted token
     const builder = await getBuilderByPhoneNumberId(phoneNumberId);
     if (!builder) {
       logger.error({ phoneNumberId }, "❌ No active builder found");
@@ -256,11 +257,9 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const contactName = extractContactName(body) ?? undefined;
     logger.info({ phone, builderId: builder.id, message: userText }, "📩 Incoming message");
 
-    // Mark as read — CHANGED: builder credentials
     await markAsRead(builder.phoneNumberId, builder.accessToken, message.id)
       .catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
-    // Get or create lead — CHANGED: builder.id pass karo
     const lead = await getOrCreateLead(phone, builder.id, contactName);
     const conversation = lead.conversations[0];
     if (!conversation) {
