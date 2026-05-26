@@ -6,6 +6,7 @@ datasource db {
     provider = "postgresql"
 }
 
+// ========== Enums ==========
 enum LeadStatus {
     NEW
     QUALIFIED
@@ -53,9 +54,28 @@ enum Timeline {
 }
 
 // ========== Models ==========
+
+model Builder {
+    id              String   @id @default(cuid())
+    businessName    String
+    phoneNumberId   String   @unique
+    encryptedToken  String   
+    wabaId          String
+    verifyToken     String  
+    phoneNumber     String?
+    systemPrompt    String?  @db.Text
+    isActive        Boolean  @default(true)
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
+
+    leads           Lead[]
+
+    @@map("builders")
+}
+
 model Lead {
     id           String        @id @default(cuid())
-    phone        String        @unique
+    phone        String
     name         String?
     propertyType PropertyType?
     budget       String?
@@ -67,8 +87,12 @@ model Lead {
     createdAt    DateTime      @default(now())
     updatedAt    DateTime      @updatedAt
 
+    builderId    String
+    builder      Builder       @relation(fields: [builderId], references: [id])
+
     conversations Conversation[]
 
+    @@unique([phone, builderId])
     @@map("leads")
 }
 
@@ -86,12 +110,12 @@ model Conversation {
 }
 
 model Message {
-    id                  String      @id @default(cuid())
-    whatsappMessageId   String?     @unique  
-    conversationId      String
-    role                MessageRole
-    content             String
-    createdAt           DateTime    @default(now())
+    id                String      @id @default(cuid())
+    whatsappMessageId String?     @unique
+    conversationId    String
+    role              MessageRole
+    content           String
+    createdAt         DateTime    @default(now())
 
     conversation Conversation @relation(fields: [conversationId], references: [id])
 

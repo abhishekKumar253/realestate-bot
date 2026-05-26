@@ -3,9 +3,7 @@ import { env } from "../config/index";
 import logger from "../utils/logger";
 import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
-const openai = env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: env.OPENAI_API_KEY })
-  : null;
+const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 // ========== Extracted Lead Data Type ==========
 export interface ExtractedLeadData {
@@ -64,11 +62,6 @@ export const extractLeadData = async (
   userMessage: string,
   conversationHistory: { role: string; content: string }[]
 ): Promise<ExtractedLeadData> => {
-  if (!openai) {
-    logger.warn("⚠️ OpenAI not configured — skipping extraction");
-    return {};
-  }
-
   try {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
@@ -100,20 +93,18 @@ export const extractLeadData = async (
 };
 
 // ========== Generate Bot Reply ==========
+// CHANGED: builderSystemPrompt parameter add kiya — har builder ka custom AI behavior
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
-  conversationHistory: { role: string; content: string }[]
+  conversationHistory: { role: string; content: string }[],
+  builderSystemPrompt?: string | null
 ): Promise<string> => {
-  if (!openai) {
-    return getDefaultReply(missingFields);
-  }
-
   try {
-    const lastUserMessage = conversationHistory
-      .findLast((msg) => msg.role === "user")?.content ?? "";
+    const lastUserMessage =
+      conversationHistory.findLast((msg) => msg.role === "user")?.content ?? "";
 
-    const systemPrompt = `
+    const basePrompt = `
 You are a highly professional, polite real estate assistant for a property business in Ranchi, Jharkhand.
 Help customers find their perfect property like a trusted family advisor.
 
@@ -148,6 +139,11 @@ STRICT BEHAVIOR RULES (CRITICAL):
    - If "Missing information" is "Nothing" BUT wantsVisit is false → reply EXACTLY: "Kya aap site visit ke liye taiyaar hain? Humein batayein, hum arrange kar lenge."
    - If "Missing information" is "Nothing" AND wantsVisit is true → CLOSE THE CONVERSATION gracefully. Example: "Shukriya [Name] ji! Aapki saari jankari mil gayi. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
 `;
+
+    // CHANGED: Builder ka custom prompt inject karo agar available hai
+    const systemPrompt = builderSystemPrompt
+      ? `${basePrompt}\n\nADDITIONAL INSTRUCTIONS FROM BUILDER:\n${builderSystemPrompt}`
+      : basePrompt;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },

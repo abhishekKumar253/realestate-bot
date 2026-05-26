@@ -1,23 +1,18 @@
 import axios from "axios";
-import { env } from "../config/index";
 import logger from "../utils/logger";
 
-const WA_API_URL = env.WHATSAPP_PHONE_NUMBER_ID
-  ? `https://graph.facebook.com/v19.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`
-  : "";
+const getApiUrl = (phoneNumberId: string) =>
+  `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
 
-const getHeaders = () => {
-  if (!env.WHATSAPP_ACCESS_TOKEN) {
-    throw new Error("WHATSAPP_ACCESS_TOKEN not set");
-  }
-  return {
-    Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
-    "Content-Type": "application/json",
-  };
-};
+const getHeaders = (accessToken: string) => ({
+  Authorization: `Bearer ${accessToken}`,
+  "Content-Type": "application/json",
+});
 
 // ========== Send Text Message ==========
 export const sendTextMessage = async (
+  phoneNumberId: string,
+  accessToken: string,
   to: string,
   message: string
 ): Promise<boolean> => {
@@ -27,26 +22,17 @@ export const sendTextMessage = async (
       recipient_type: "individual",
       to,
       type: "text",
-      text: {
-        preview_url: false,
-        body: message,
-      },
+      text: { preview_url: false, body: message },
     };
 
-    const response = await axios.post(WA_API_URL, payload, {
-      headers: getHeaders(),
+    const response = await axios.post(getApiUrl(phoneNumberId), payload, {
+      headers: getHeaders(accessToken),
     });
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ Text message sent"
-    );
+    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ Text message sent");
     return true;
   } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
+    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
     logger.error({ error: metaError, to }, "❌ Failed to send text message");
     return false;
   }
@@ -54,6 +40,8 @@ export const sendTextMessage = async (
 
 // ========== Send Interactive Buttons ==========
 export const sendButtonMessage = async (
+  phoneNumberId: string,
+  accessToken: string,
   to: string,
   message: string,
   buttons: { id: string; title: string }[]
@@ -76,20 +64,14 @@ export const sendButtonMessage = async (
       },
     };
 
-    const response = await axios.post(WA_API_URL, payload, {
-      headers: getHeaders(),
+    const response = await axios.post(getApiUrl(phoneNumberId), payload, {
+      headers: getHeaders(accessToken),
     });
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ Button message sent"
-    );
+    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ Button message sent");
     return true;
   } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
+    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
     logger.error({ error: metaError, to }, "❌ Failed to send button message");
     return false;
   }
@@ -97,6 +79,8 @@ export const sendButtonMessage = async (
 
 // ========== Send List Message ==========
 export const sendListMessage = async (
+  phoneNumberId: string,
+  accessToken: string,
   to: string,
   message: string,
   buttonText: string,
@@ -114,59 +98,51 @@ export const sendListMessage = async (
       interactive: {
         type: "list",
         body: { text: message },
-        action: {
-          button: buttonText,
-          sections,
-        },
+        action: { button: buttonText, sections },
       },
     };
 
-    const response = await axios.post(WA_API_URL, payload, {
-      headers: getHeaders(),
+    const response = await axios.post(getApiUrl(phoneNumberId), payload, {
+      headers: getHeaders(accessToken),
     });
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ List message sent"
-    );
+    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ List message sent");
     return true;
   } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
+    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
     logger.error({ error: metaError, to }, "❌ Failed to send list message");
     return false;
   }
 };
 
 // ========== Mark Message as Read ==========
-export const markAsRead = async (messageId: string): Promise<boolean> => {
+export const markAsRead = async (
+  phoneNumberId: string,
+  accessToken: string,
+  messageId: string
+): Promise<void> => {
   try {
-    const payload = {
-      messaging_product: "whatsapp",
-      status: "read",
-      message_id: messageId,
-    };
-
-    await axios.post(WA_API_URL, payload, {
-      headers: getHeaders(),
-    });
+    await axios.post(
+      getApiUrl(phoneNumberId),
+      { messaging_product: "whatsapp", status: "read", message_id: messageId },
+      { headers: getHeaders(accessToken) }
+    );
 
     logger.info({ messageId }, "✅ Message marked as read");
-    return true;
   } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
-    logger.error({ error: metaError, messageId }, "❌ Failed to mark as read");
-    return false;
+    // Non-critical — log as warn only
+    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    logger.warn({ error: metaError, messageId }, "⚠️ Failed to mark as read");
   }
 };
 
 // ========== Send Typing Indicator ==========
-export const sendTypingIndicator = async (to: string, messageId: string): Promise<boolean> => {
+export const sendTypingIndicator = async (
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  messageId: string
+): Promise<void> => {
   try {
     const payload = {
       messaging_product: "whatsapp",
@@ -175,12 +151,13 @@ export const sendTypingIndicator = async (to: string, messageId: string): Promis
       typing_indicator: { type: "text" },
     };
 
-    await axios.post(WA_API_URL, payload, { headers: getHeaders() });
-    logger.info({ to, messageId }, "✅ Typing indicator sent");
-    return true;
+    await axios.post(getApiUrl(phoneNumberId), payload, {
+      headers: getHeaders(accessToken),
+    });
+
+    logger.info({ to }, "✅ Typing indicator sent");
   } catch (error: unknown) {
     const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
-    logger.error({ error: metaError, to, messageId }, "❌ Failed to send typing indicator");
-    return false;
+    logger.warn({ error: metaError, to }, "⚠️ Failed to send typing indicator");
   }
 };

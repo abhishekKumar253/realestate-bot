@@ -10,8 +10,7 @@ import {
 } from "@prisma/client";
 
 // ========== Types ==========
-export interface LeadData {
-  phone: string;
+export interface LeadUpdateData {
   name?: string;
   propertyType?: PropertyType;
   budget?: string;
@@ -19,17 +18,26 @@ export interface LeadData {
   bhk?: string;
   purpose?: Purpose;
   timeline?: Timeline;
+  status?: LeadStatus;
 }
 
 // ========== Get or Create Lead ==========
-export const getOrCreateLead = async (phone: string, name?: string) => {
+// CHANGED: builderId required — composite key (phone + builderId)
+export const getOrCreateLead = async (
+  phone: string,
+  builderId: string,
+  name?: string
+) => {
   try {
     const lead = await prisma.lead.upsert({
-      where: { phone },
+      where: {
+        phone_builderId: { phone, builderId }, // composite unique key
+      },
       update: {},
       create: {
         phone,
         name,
+        builderId,
         status: LeadStatus.NEW,
         conversations: {
           create: {
@@ -43,8 +51,8 @@ export const getOrCreateLead = async (phone: string, name?: string) => {
           take: 1,
           include: {
             messages: {
-              orderBy: { createdAt: "desc" },
-              take: 10,
+              orderBy: { createdAt: "asc" },
+              take: 20,
             },
           },
         },
@@ -52,31 +60,41 @@ export const getOrCreateLead = async (phone: string, name?: string) => {
     });
 
     if (lead.createdAt.getTime() === lead.updatedAt.getTime()) {
-      logger.info({ phone }, "✅ New lead created successfully");
+      logger.info({ phone, builderId }, "✅ New lead created");
     }
 
     return lead;
   } catch (error) {
-    logger.error({ error, phone }, "❌ Failed to upsert lead");
+    logger.error({ error, phone, builderId }, "❌ Failed to upsert lead");
     throw error;
   }
 };
 
-// ========== Update Lead Data (OPTIMIZED) ==========
-export const updateLead = async (
-  phone: string,
-  data: Partial<LeadData>
-) => {
+// ========== Update Lead ==========
+// CHANGED: where: { phone } → where: { id: leadId }
+export const updateLead = async (leadId: string, data: LeadUpdateData) => {
   try {
     const updated = await prisma.lead.update({
-      where: { phone },
+      where: { id: leadId },
       data,
+      include: {
+        conversations: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            messages: {
+              orderBy: { createdAt: "asc" },
+              take: 20,
+            },
+          },
+        },
+      },
     });
 
-    logger.info({ phone, data }, "✅ Lead updated");
-    return updated; 
+    logger.info({ leadId, data }, "✅ Lead updated");
+    return updated;
   } catch (error) {
-    logger.error({ error, phone }, "❌ Failed to update lead");
+    logger.error({ error, leadId }, "❌ Failed to update lead");
     throw error;
   }
 };
@@ -99,7 +117,7 @@ export const updateConversationState = async (
   }
 };
 
-// ========== Save Message (UPDATED – race‑condition proof) ==========
+// ========== Save Message ==========
 export const saveMessage = async (
   conversationId: string,
   role: MessageRole,
@@ -116,8 +134,8 @@ export const saveMessage = async (
       },
     });
   } catch (error: any) {
-    if (error?.code === 'P2002' && error?.meta?.target?.includes('whatsappMessageId')) {
-      logger.warn({ whatsappMessageId }, "⚠️ Duplicate message skipped (race condition)");
+    if (error?.code === "P2002" && error?.meta?.target?.includes("whatsappMessageId")) {
+      logger.warn({ whatsappMessageId }, "⚠️ Duplicate message skipped");
       return;
     }
     logger.error({ error, conversationId }, "❌ Failed to save message");
@@ -140,28 +158,30 @@ export const getConversationHistory = async (conversationId: string) => {
 };
 
 // ========== Update Lead Status ==========
+// CHANGED: where: { phone } → where: { id: leadId }
 export const updateLeadStatus = async (
-  phone: string,
+  leadId: string,
   status: LeadStatus
 ): Promise<void> => {
   try {
     await prisma.lead.update({
-      where: { phone },
+      where: { id: leadId },
       data: { status },
     });
 
-    logger.info({ phone, status }, "✅ Lead status updated");
+    logger.info({ leadId, status }, "✅ Lead status updated");
   } catch (error) {
-    logger.error({ error, phone }, "❌ Failed to update lead status");
+    logger.error({ error, leadId }, "❌ Failed to update lead status");
     throw error;
   }
 };
 
 // ========== Get Lead Summary ==========
-export const getLeadSummary = async (phone: string) => {
+// CHANGED: where: { phone } → where: { id: leadId }
+export const getLeadSummary = async (leadId: string) => {
   try {
     return await prisma.lead.findUnique({
-      where: { phone },
+      where: { id: leadId },
       include: {
         conversations: {
           orderBy: { createdAt: "desc" },
@@ -170,7 +190,7 @@ export const getLeadSummary = async (phone: string) => {
       },
     });
   } catch (error) {
-    logger.error({ error, phone }, "❌ Failed to get lead summary");
+    logger.error({ error, leadId }, "❌ Failed to get lead summary");
     throw error;
   }
 };
