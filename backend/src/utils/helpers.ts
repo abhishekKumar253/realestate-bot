@@ -46,20 +46,16 @@ const HINGLISH_WORDS = new Set([
  * Used to force bot replies in the correct language.
  */
 export const detectLanguage = (text: string): "hindi" | "english" | "hinglish" => {
-  // Check for Devanagari script (Hindi)
-  if (/[\u0900-\u097F]/.test(text)) {
-    return "hindi";
-  }
+  if (/[\u0900-\u097F]/.test(text)) return "hindi";
 
-  // Count how many common Hinglish words appear in the message
+  // Short greetings — default to hinglish
+  const trimmed = text.trim().toLowerCase();
+  if (trimmed.length <= 6) return "hinglish";
+
   const words = text.toLowerCase().split(/\s+/);
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
 
-  // If 2 or more Hinglish words present, treat as Hinglish
-  if (hinglishCount >= 2) {
-  return "hinglish";
-}
+  if (hinglishCount >= 1) return "hinglish";
 
-  // Default: English
   return "english";
 };
