@@ -93,7 +93,6 @@ export const extractLeadData = async (
 };
 
 // ========== Generate Bot Reply ==========
-// CHANGED: builderSystemPrompt parameter add kiya — har builder ka custom AI behavior
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -115,9 +114,11 @@ Missing information: ${missingFields.length > 0 ? missingFields.join(", ") : "No
 
 USER'S LAST MESSAGE: "${lastUserMessage}"
 
-STRICT LANGUAGE RULE:
-- Default to clear, natural Hinglish.
-- If user uses pure Hindi (Devanagari) or English, match their language.
+STRICT LANGUAGE RULES (APPLY IN THIS ORDER):
+1. If the user's LAST message contains ANY Devanagari (Hindi script) characters (e.g., "हैलो", "नमस्ते", "मकान") → reply in PURE HINDI using Devanagari script. Do not use any English words.
+2. If the user's LAST message is in PURE ENGLISH (only Latin script, with English sentence structure, even if it includes proper nouns like area names "Ratu Road", "Kanke") → reply in English. Treat abbreviations like "3BHK", "50L" as English.
+3. If the user's LAST message is a Hinglish mix (contains Hindi words written in Latin script, like "kya", "hai", "mujhe", "chahiye", "leke") → reply in Hinglish (Latin script, casual mix of English and Hindi).
+4. DO NOT mix languages. Match the language category exactly.
 
 SPECIAL HANDLING BY PROPERTY TYPE (DO THIS BEFORE ASKING STANDARD QUESTIONS):
 - If propertyType is PLOT → Ask: "Kitne square feet ka plot chahiye? Aur registry clear hona chahiye?"
@@ -140,7 +141,6 @@ STRICT BEHAVIOR RULES (CRITICAL):
    - If "Missing information" is "Nothing" AND wantsVisit is true → CLOSE THE CONVERSATION gracefully. Example: "Shukriya [Name] ji! Aapki saari jankari mil gayi. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
 `;
 
-    // CHANGED: Builder ka custom prompt inject karo agar available hai
     const systemPrompt = builderSystemPrompt
       ? `${basePrompt}\n\nADDITIONAL INSTRUCTIONS FROM BUILDER:\n${builderSystemPrompt}`
       : basePrompt;
