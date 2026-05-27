@@ -56,9 +56,9 @@ export const detectLanguage = (text: string): "hindi" | "english" | "hinglish" =
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
 
   // If 2 or more Hinglish words present, treat as Hinglish
-  if (hinglishCount >= 2) {
-    return "hinglish";
-  }
+  if (hinglishCount >= 1) {
+  return "hinglish";
+}
 
   // Default: English
   return "english";
