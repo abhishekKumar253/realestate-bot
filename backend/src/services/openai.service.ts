@@ -98,7 +98,7 @@ export const generateReply = async (
   leadData: ExtractedLeadData,
   conversationHistory: { role: string; content: string }[],
   builderSystemPrompt?: string | null,
-  userLanguage?: "hindi" | "english" | "hinglish"   // ✅ NEW
+  userLanguage?: "hindi" | "english" | "hinglish"
 ): Promise<string> => {
   try {
     const lastUserMessage =
@@ -108,23 +108,23 @@ export const generateReply = async (
     let languageOverride = "";
     if (userLanguage === "hindi") {
       languageOverride = `
-‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE HINDI using Devanagari script. You MUST respond exclusively in Devanagari Hindi. Do NOT use any Latin characters. Ignore any previous messages in other languages. 
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE HINDI using Devanagari script. You MUST respond exclusively in Devanagari Hindi. Do NOT use any Latin characters. Ignore any previous messages in other languages. IGNORE the language of any messages in the conversation history; only the current user message matters for language.
 `;
     } else if (userLanguage === "english") {
       languageOverride = `
-‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE ENGLISH. You MUST respond exclusively in English. Do NOT use any Hindi words.
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE ENGLISH. You MUST respond exclusively in English. Do NOT use any Hindi words. Ignore any previous messages in other languages. IGNORE the language of any messages in the conversation history; only the current user message matters for language.
 `;
     } else if (userLanguage === "hinglish") {
       languageOverride = `
-‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in HINGLISH. You MUST respond in Hinglish (Latin script, mix of English and Hindi).
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in HINGLISH. You MUST respond in Hinglish (Latin script, mix of English and Hindi). Ignore any previous messages in other languages. IGNORE the language of any messages in the conversation history; only the current user message matters for language.
 `;
     }
 
     const basePrompt = `
+${languageOverride}
+
 You are a highly professional, polite real estate assistant for a property business in Ranchi, Jharkhand.
 Help customers find their perfect property like a trusted family advisor.
-
-${languageOverride}
 
 Current lead data collected:
 ${JSON.stringify(leadData, null, 2)}
@@ -159,7 +159,8 @@ STRICT BEHAVIOR RULES (CRITICAL):
 5. DO NOT RUSH SITE VISITS: If the "Missing information" list is NOT empty, DO NOT ask the user for a site visit. Finish collecting the missing details first.
    - HOWEVER, before moving to the site visit question, always ask about preferred amenities (e.g., lift, parking, gated society) if not yet collected, but only after all required fields are gathered.
 6. DOMAIN RULE: ONLY discuss real estate. For weather, sports, or unrelated topics, reply: "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?" If user asks about loans, answer briefly ("Ji, maximum projects me bank loan available hai.") AND transition to asking a missing field.
-7. SITE VISIT STAGING:
+7. CAPABILITY BOUNDARY: The bot can only send text messages. It cannot send photos, videos, PDFs, or documents yet. If the user asks for any media, politely set their expectation. For example: "Abhi main photo nahi bhej sakta, lekin hamari team aapko WhatsApp par zaroor bhejegi. Tab tak, kya aap apna budget share kar sakte hain?" Then, smoothly transition to asking the next missing field.
+8. SITE VISIT STAGING:
    - If "Missing information" is "Nothing" BUT wantsVisit is false → reply EXACTLY: "Kya aap site visit ke liye taiyaar hain? Humein batayein, hum arrange kar lenge."
    - If "Missing information" is "Nothing" AND wantsVisit is true → CLOSE THE CONVERSATION gracefully. Example: "Shukriya [Name] ji! Aapki saari jankari mil gayi. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
 `;
@@ -180,7 +181,7 @@ STRICT BEHAVIOR RULES (CRITICAL):
       model: "gpt-4o-mini",
       messages,
       max_tokens: 200,
-      temperature: 0.7,
+      temperature: 0.2,
     });
 
     const reply = response.choices[0]?.message?.content;
