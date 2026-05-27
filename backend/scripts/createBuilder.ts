@@ -59,16 +59,14 @@ Optional:
 }
 
 const main = async () => {
-  if (!process.env.DIRECT_URL && !process.env.DATABASE_URL) {
-    console.error("❌ DIRECT_URL or DATABASE_URL not set");
+  const dbUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+
+  if (!dbUrl) {
+    console.error("❌ DIRECT_URL or DATABASE_URL not set in .env");
     process.exit(1);
   }
 
-  // Use DIRECT_URL for scripts — avoids pooler issues
-  if (process.env.DIRECT_URL) {
-    process.env.DATABASE_URL = process.env.DIRECT_URL;
-  }
-
+  process.env.DATABASE_URL = dbUrl;
   const prisma = new PrismaClient();
 
   try {
