@@ -45,7 +45,11 @@ const main = async () => {
   const adapter = new PrismaNeon({ connectionString: dbUrl });
   const prisma = new PrismaClient({ adapter });
 
-  const PHONE_NUMBER_ID = "1140190562507844";
+  const PHONE_NUMBER_ID = process.argv[2];
+  if (!PHONE_NUMBER_ID) {
+  console.error("Usage: npx tsx scripts/addBuilder.ts <phoneNumberId>");
+  process.exit(1);
+ }
 
   const builder = await prisma.builder.findUnique({
     where: { phoneNumberId: PHONE_NUMBER_ID },
