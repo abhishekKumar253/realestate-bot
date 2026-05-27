@@ -97,15 +97,34 @@ export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
   conversationHistory: { role: string; content: string }[],
-  builderSystemPrompt?: string | null
+  builderSystemPrompt?: string | null,
+  userLanguage?: "hindi" | "english" | "hinglish"   // ✅ NEW
 ): Promise<string> => {
   try {
     const lastUserMessage =
       conversationHistory.findLast((msg) => msg.role === "user")?.content ?? "";
 
+    // ========== Language Override (Deterministic) ==========
+    let languageOverride = "";
+    if (userLanguage === "hindi") {
+      languageOverride = `
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE HINDI using Devanagari script. You MUST respond exclusively in Devanagari Hindi. Do NOT use any Latin characters. Ignore any previous messages in other languages. 
+`;
+    } else if (userLanguage === "english") {
+      languageOverride = `
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in PURE ENGLISH. You MUST respond exclusively in English. Do NOT use any Hindi words.
+`;
+    } else if (userLanguage === "hinglish") {
+      languageOverride = `
+‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in HINGLISH. You MUST respond in Hinglish (Latin script, mix of English and Hindi).
+`;
+    }
+
     const basePrompt = `
 You are a highly professional, polite real estate assistant for a property business in Ranchi, Jharkhand.
 Help customers find their perfect property like a trusted family advisor.
+
+${languageOverride}
 
 Current lead data collected:
 ${JSON.stringify(leadData, null, 2)}

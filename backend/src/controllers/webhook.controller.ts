@@ -6,6 +6,7 @@ import {
   extractContactName,
   extractPhoneNumberId,
   normalizePhone,
+  detectLanguage,
 } from "../utils/helpers";
 import {
   getOrCreateLead,
@@ -187,6 +188,8 @@ async function processIncomingMessage(
   ).catch((err) => logger.warn({ err }, "⚠️ Typing indicator failed"));
 
   // 9. Generate reply
+  const userLanguage = detectLanguage(userText);
+
   const reply = await generateReply(
     missingFields,
     {
@@ -201,7 +204,8 @@ async function processIncomingMessage(
       visitNote: extracted.visitNote,
     },
     [...historyForOpenAI, { role: "user" as const, content: userText }],
-    builder.systemPrompt
+    builder.systemPrompt,
+    userLanguage
   );
 
   // 10. Send reply
