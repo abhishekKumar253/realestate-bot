@@ -1,8 +1,13 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaNeon } from "@prisma/adapter-neon";
+import { neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 import * as dotenv from "dotenv";
 import * as crypto from "node:crypto";
 
 dotenv.config();
+
+neonConfig.webSocketConstructor = ws;
 
 const encryptToken = (plainToken: string): string => {
   const keyHex = process.env.TOKEN_ENCRYPTION_KEY;
@@ -60,14 +65,13 @@ Optional:
 
 const main = async () => {
   const dbUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
-
   if (!dbUrl) {
     console.error("❌ DIRECT_URL or DATABASE_URL not set in .env");
     process.exit(1);
   }
 
-  process.env.DATABASE_URL = dbUrl;
-  const prisma = new PrismaClient();
+  const adapter = new PrismaNeon({ connectionString: dbUrl });
+  const prisma = new PrismaClient({ adapter });
 
   try {
     const existing = await prisma.builder.findUnique({
