@@ -336,17 +336,12 @@ export const handleIncoming = async (
     const message = extractMessage(body);
     if (!message) return;
     if (message.type !== "text" && message.type !== "interactive") {
-      const phone = normalizePhone(message.from);
-      const fallbackMsg =
-        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye.";
-
       await sendTextMessage(
         builder.phoneNumberId,
         builder.accessToken,
-        phone,
-        fallbackMsg
-      ).catch((err) => logger.warn({ err }, "Failed to send fallback message"));
-
+        normalizePhone(message.from),
+        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
+      );
       return;
     }
 
