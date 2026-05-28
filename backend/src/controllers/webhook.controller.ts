@@ -39,6 +39,14 @@ import type {
 } from "../types/whatsapp.types";
 import { prisma } from "../db/prisma";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+import {
+  REQUIRED_LEAD_FIELDS,
+  SITE_VISIT_AFFIRMATIVE_PATTERNS,
+  GREETING_WORDS,
+  OPT_OUT_PHRASES,
+} from "../constants/conversation.constants";
+
 // ========== GET — Meta Webhook Verification ==========
 export const handleVerification = async (
   req: Request,
@@ -89,17 +97,9 @@ const buildUpdateData = (
   return data;
 };
 
+// ✅ Using constants file
 const getMissingFields = (lead: Record<string, unknown>): string[] => {
-  const required = [
-    "propertyType",
-    "budget",
-    "location",
-    "bhk",
-    "purpose",
-    "timeline",
-    "name",
-  ];
-  return required.filter((f) => !lead[f]);
+  return REQUIRED_LEAD_FIELDS.filter((f) => !lead[f]);
 };
 
 const fieldToState: Record<string, ConversationState> = {
@@ -157,41 +157,10 @@ async function processIncomingMessage(
 
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
+  // ✅ Using constants for affirmative patterns
   if (conversation.state === ConversationState.ASK_SITE_VISIT) {
     const lowerMsg = userText.toLowerCase().trim();
-    const affirmativePatterns = [
-      "haan",
-      "ha",
-      "yes",
-      "haan ji",
-      "hanji",
-      "ok",
-      "okay",
-      "ready",
-      "ready hu",
-      "ready hai",
-      "taiyar hai",
-      "taiyar hu",
-      "chalo",
-      "chaliye",
-      "abhi karte hain",
-      "bilkul",
-      "theek hai",
-      "sahi hai",
-      "ji haan",
-      "i am ready",
-      "let's go",
-      "sure",
-      "confirmed",
-      "done",
-      "chalega",
-      "ham ready",
-      "hum ready",
-      "hai taiyaar",
-      "taiyaar h",
-      "taiyar h",
-    ];
-    extracted.wantsVisit = affirmativePatterns.some((p) =>
+    extracted.wantsVisit = SITE_VISIT_AFFIRMATIVE_PATTERNS.some((p) =>
       lowerMsg.includes(p)
     );
   } else {
@@ -323,7 +292,6 @@ async function fetchActiveBuilder(
   return builder;
 }
 
-// Helper: send fallback message for unsupported message types
 async function sendFallbackIfNeeded(
   message: IncomingMessage,
   builder: BuilderWithToken
@@ -340,7 +308,6 @@ async function sendFallbackIfNeeded(
   return false;
 }
 
-// Helper: check for duplicate message
 async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
   const existing = await prisma.message.findUnique({
     where: { whatsappMessageId },
@@ -352,25 +319,13 @@ async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
   return false;
 }
 
-// Helper: clean contact name (filter out casual greetings)
+// ✅ Using constants for greetings
 function cleanContactName(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  const greetingSet = new Set([
-    "hi",
-    "hii",
-    "hello",
-    "hey",
-    "hlo",
-    "helo",
-    "namaste",
-    "namaskar",
-    "ram ram",
-    "pranam",
-  ]);
-  return greetingSet.has(raw.toLowerCase().trim()) ? undefined : raw;
+  return GREETING_WORDS.has(raw.toLowerCase().trim()) ? undefined : raw;
 }
 
-// Helper: handle opt-out logic; returns true if request should be terminated
+// ✅ Using constants for opt‑out phrases
 async function handleOptOut(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   userText: string,
@@ -382,21 +337,9 @@ async function handleOptOut(
     return true;
   }
 
-  const optOutPhrases = [
-    "stop",
-    "band karo",
-    "unsubscribe",
-    "don't contact",
-    "hato",
-    "delete karo",
-    "remove me",
-    "quit",
-    "exit",
-    "no more messages",
-  ];
   const lowerText = userText.toLowerCase().trim();
 
-  if (optOutPhrases.some((phrase) => lowerText.includes(phrase))) {
+  if (OPT_OUT_PHRASES.some((phrase) => lowerText.includes(phrase))) {
     await updateLeadStatus(lead.id, LeadStatus.LOST);
     await sendTextMessage(
       builder.phoneNumberId,
@@ -412,7 +355,6 @@ async function handleOptOut(
   return false;
 }
 
-// Helper: get active conversation (reset if COMPLETED)
 async function getActiveConversation(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   phone: string

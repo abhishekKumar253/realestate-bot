@@ -2,6 +2,10 @@ import {
   WhatsAppWebhookPayload,
   IncomingMessage,
 } from "../types/whatsapp.types";
+import {
+  HINGLISH_WORDS,
+  CASUAL_GREETINGS,
+} from "../constants/conversation.constants";
 
 export const extractMessage = (
   body: WhatsAppWebhookPayload
@@ -47,56 +51,6 @@ export const extractPhoneNumberId = (
   }
 };
 
-const HINGLISH_WORDS = new Set([
-  "kya",
-  "hai",
-  "hain",
-  "mujhe",
-  "chahiye",
-  "leke",
-  "denge",
-  "kar",
-  "ka",
-  "ki",
-  "mein",
-  "aap",
-  "aapko",
-  "hum",
-  "humein",
-  "batao",
-  "dekho",
-  "suno",
-  "jao",
-  "karo",
-  "hoga",
-  "hogi",
-  "honge",
-  "tha",
-  "thi",
-  "the",
-  "karna",
-  "karte",
-  "karti",
-  "hu",
-  "mai",
-  "tum",
-  "tumhara",
-  "apna",
-  "yeh",
-  "woh",
-  "nahi",
-  "na",
-  "ji",
-  "haan",
-  "are",
-  "aur",
-  "bhi",
-  "hi",
-  "toh",
-  "tho",
-  "par",
-]);
-
 /**
  * Detect language of a message: Devanagari (Hindi), English, or Hinglish.
  * Used to force bot replies in the correct language.
@@ -109,22 +63,12 @@ export const detectLanguage = (
   const lowerText = text.toLowerCase().trim();
   const words = lowerText.split(/\s+/);
 
-  const casualGreetings = new Set([
-    "hi",
-    "hii",
-    "hello",
-    "hey",
-    "hlo",
-    "helo",
-    "namaste",
-    "namaskar",
-    "ram ram",
-  ]);
-  if (casualGreetings.has(words[0]) && words.length <= 2) {
+  // Short casual greeting → Hinglish
+  if (CASUAL_GREETINGS.has(words[0]) && words.length <= 2) {
     return "hinglish";
   }
 
-  // If more than 0 Hinglish words → Hinglish
+  // If any Hinglish word found → Hinglish
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
   if (hinglishCount > 0) return "hinglish";
 
