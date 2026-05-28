@@ -349,6 +349,7 @@ export const handleIncoming = async (
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
+    // Duplicate check
     const existingMsg = await prisma.message.findUnique({
       where: { whatsappMessageId: message.id },
     });
@@ -357,7 +358,25 @@ export const handleIncoming = async (
       return;
     }
 
-    const contactName = extractContactName(body) ?? undefined;
+    // Extract and clean the contact name (filter out casual greetings)
+    const contactNameRaw = extractContactName(body) ?? undefined;
+    const greetingSet = new Set([
+      "hi",
+      "hii",
+      "hello",
+      "hey",
+      "hlo",
+      "helo",
+      "namaste",
+      "namaskar",
+      "ram ram",
+      "pranam",
+    ]);
+    const cleanedName =
+      contactNameRaw && greetingSet.has(contactNameRaw.toLowerCase().trim())
+        ? undefined
+        : contactNameRaw;
+
     logger.info(
       { phone, builderId: builder.id, message: userText },
       "📩 Incoming message"
@@ -369,11 +388,44 @@ export const handleIncoming = async (
       message.id
     ).catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
-    const lead = await getOrCreateLead(phone, builder.id, contactName);
+    // Get or create lead with cleaned name
+    const lead = await getOrCreateLead(phone, builder.id, cleanedName);
 
-    // CHANGED: COMPLETED state mein naya conversation banao — reset
+    // --- Opt‑Out Handling ---
+    const optOutPhrases = [
+      "stop",
+      "band karo",
+      "unsubscribe",
+      "don't contact",
+      "hato",
+      "delete karo",
+      "remove me",
+      "quit",
+      "exit",
+      "no more messages",
+    ];
+    const lowerText = userText.toLowerCase().trim();
+
+    if (lead.status === LeadStatus.LOST) {
+      logger.info({ phone }, "⚠️ Lead is LOST — ignoring message");
+      return;
+    }
+
+    // If current message contains opt‑out keywords, mark as LOST and confirm
+    if (optOutPhrases.some((phrase) => lowerText.includes(phrase))) {
+      await updateLeadStatus(lead.id, LeadStatus.LOST);
+      await sendTextMessage(
+        builder.phoneNumberId,
+        builder.accessToken,
+        phone,
+        "Aapka number hamare system se hata diya gaya hai. Aapko ab koi message nahi milega. Dhanyavaad."
+      ).catch((err) =>
+        logger.warn({ err }, "Failed to send opt‑out confirmation")
+      );
+      return;
+    }
+
     let conversation = lead.conversations[0];
-
     if (!conversation) {
       logger.error({ phone }, "❌ No conversation found");
       return;

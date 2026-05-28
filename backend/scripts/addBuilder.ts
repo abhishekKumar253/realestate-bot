@@ -47,9 +47,9 @@ const main = async () => {
 
   const PHONE_NUMBER_ID = process.argv[2];
   if (!PHONE_NUMBER_ID) {
-  console.error("Usage: npx tsx scripts/addBuilder.ts <phoneNumberId>");
-  process.exit(1);
- }
+    console.error("Usage: npx tsx scripts/addBuilder.ts <phoneNumberId>");
+    process.exit(1);
+  }
 
   const builder = await prisma.builder.findUnique({
     where: { phoneNumberId: PHONE_NUMBER_ID },

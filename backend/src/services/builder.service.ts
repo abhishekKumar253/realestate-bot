@@ -6,7 +6,7 @@ import logger from "../utils/logger";
 export interface CreateBuilderInput {
   businessName: string;
   phoneNumberId: string;
-  accessToken: string;     
+  accessToken: string;
   wabaId: string;
   verifyToken: string;
   phoneNumber?: string;
@@ -17,7 +17,7 @@ export interface BuilderWithToken {
   id: string;
   businessName: string;
   phoneNumberId: string;
-  accessToken: string;     
+  accessToken: string;
   wabaId: string;
   verifyToken: string | null;
   phoneNumber: string | null;
@@ -49,7 +49,7 @@ export const createBuilder = async (
 
   return {
     ...builder,
-    accessToken: input.accessToken,  
+    accessToken: input.accessToken,
   };
 };
 
@@ -75,7 +75,7 @@ export const getBuilderByPhoneNumberId = async (
       { builderId: builder.id, error: message },
       "Failed to decrypt token — check TOKEN_ENCRYPTION_KEY"
     );
-    return null;           // treat as not found — bot won't reply with wrong token
+    return null; // treat as not found — bot won't reply with wrong token
   }
 };
 
@@ -98,10 +98,7 @@ export const getBuilderById = async (
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    logger.error(
-      { builderId: id, error: message },
-      "Failed to decrypt token"
-    );
+    logger.error({ builderId: id, error: message }, "Failed to decrypt token");
     return null;
   }
 };

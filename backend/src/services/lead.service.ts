@@ -112,7 +112,10 @@ export const updateConversationState = async (
 
     logger.info({ conversationId, state }, "✅ Conversation state updated");
   } catch (error) {
-    logger.error({ error, conversationId }, "❌ Failed to update conversation state");
+    logger.error(
+      { error, conversationId },
+      "❌ Failed to update conversation state"
+    );
     throw error;
   }
 };
@@ -134,7 +137,10 @@ export const saveMessage = async (
       },
     });
   } catch (error: any) {
-    if (error?.code === "P2002" && error?.meta?.target?.includes("whatsappMessageId")) {
+    if (
+      error?.code === "P2002" &&
+      error?.meta?.target?.includes("whatsappMessageId")
+    ) {
       logger.warn({ whatsappMessageId }, "⚠️ Duplicate message skipped");
       return;
     }
@@ -152,7 +158,10 @@ export const getConversationHistory = async (conversationId: string) => {
       take: 20,
     });
   } catch (error) {
-    logger.error({ error, conversationId }, "❌ Failed to get conversation history");
+    logger.error(
+      { error, conversationId },
+      "❌ Failed to get conversation history"
+    );
     throw error;
   }
 };

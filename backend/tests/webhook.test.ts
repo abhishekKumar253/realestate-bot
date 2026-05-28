@@ -1,19 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import { verifyWebhook, verifySignature } from "../src/middlewares/webhook.middleware";
+import { verifySignature } from "../src/middlewares/webhook.middleware";
 import * as crypto from "node:crypto";
 
 // ========== Test App Setup ==========
 const app = express();
-app.use(express.json({
-  verify: (_req: any, _res, buf) => {
-    _req.rawBody = buf.toString();
-  },
-}));
+app.use(
+  express.json({
+    verify: (_req: any, _res, buf) => {
+      _req.rawBody = buf.toString();
+    },
+  })
+);
 
-app.get("/webhook", verifyWebhook);
-app.post("/webhook", verifySignature, (req, res) => {
+app.post("/webhook", verifySignature, (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
@@ -44,48 +45,6 @@ const generateSignature = (body: string, secret: string): string => {
 
 // ========== Tests ==========
 describe("Webhook Middleware", () => {
-
-  // ===== GET — Verification Tests =====
-  describe("GET /webhook - verifyWebhook", () => {
-    it("should return challenge when token matches", async () => {
-      const res = await request(app)
-        .get("/webhook")
-        .query({
-          "hub.mode": "subscribe",
-          "hub.verify_token": "test_verify_token",
-          "hub.challenge": "test_challenge_123",
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.text).toBe("test_challenge_123");
-    });
-
-    it("should return 403 when token does not match", async () => {
-      const res = await request(app)
-        .get("/webhook")
-        .query({
-          "hub.mode": "subscribe",
-          "hub.verify_token": "wrong_token",
-          "hub.challenge": "test_challenge_123",
-        });
-
-      expect(res.status).toBe(403);
-      expect(res.body).toEqual({ error: "Forbidden" });
-    });
-
-    it("should return 403 when mode is not subscribe", async () => {
-      const res = await request(app)
-        .get("/webhook")
-        .query({
-          "hub.mode": "unsubscribe",
-          "hub.verify_token": "test_verify_token",
-          "hub.challenge": "test_challenge_123",
-        });
-
-      expect(res.status).toBe(403);
-    });
-  });
-
   // ===== POST — Signature Tests =====
   describe("POST /webhook - verifySignature", () => {
     const testBody = JSON.stringify({

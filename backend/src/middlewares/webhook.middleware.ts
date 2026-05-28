@@ -37,7 +37,10 @@ export const verifySignature = (
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expectedSignature);
 
-  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+  if (
+    sigBuf.length !== expBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expBuf)
+  ) {
     logger.error("❌ Invalid signature — potential spoofing attempt");
     res.status(401).json({ error: "Unauthorized" });
     return;

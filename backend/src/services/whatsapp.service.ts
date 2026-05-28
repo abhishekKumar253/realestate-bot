@@ -29,10 +29,16 @@ export const sendTextMessage = async (
       headers: getHeaders(accessToken),
     });
 
-    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ Text message sent");
+    logger.info(
+      { to, messageId: response.data.messages?.[0]?.id },
+      "✅ Text message sent"
+    );
     return true;
   } catch (error: unknown) {
-    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
     logger.error({ error: metaError, to }, "❌ Failed to send text message");
     return false;
   }
@@ -68,10 +74,16 @@ export const sendButtonMessage = async (
       headers: getHeaders(accessToken),
     });
 
-    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ Button message sent");
+    logger.info(
+      { to, messageId: response.data.messages?.[0]?.id },
+      "✅ Button message sent"
+    );
     return true;
   } catch (error: unknown) {
-    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
     logger.error({ error: metaError, to }, "❌ Failed to send button message");
     return false;
   }
@@ -106,10 +118,16 @@ export const sendListMessage = async (
       headers: getHeaders(accessToken),
     });
 
-    logger.info({ to, messageId: response.data.messages?.[0]?.id }, "✅ List message sent");
+    logger.info(
+      { to, messageId: response.data.messages?.[0]?.id },
+      "✅ List message sent"
+    );
     return true;
   } catch (error: unknown) {
-    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
     logger.error({ error: metaError, to }, "❌ Failed to send list message");
     return false;
   }
@@ -131,7 +149,10 @@ export const markAsRead = async (
     logger.info({ messageId }, "✅ Message marked as read");
   } catch (error: unknown) {
     // Non-critical — log as warn only
-    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
     logger.warn({ error: metaError, messageId }, "⚠️ Failed to mark as read");
   }
 };
@@ -157,7 +178,10 @@ export const sendTypingIndicator = async (
 
     logger.info({ to }, "✅ Typing indicator sent");
   } catch (error: unknown) {
-    const metaError = error instanceof Error ? (error as any).response?.data ?? error.message : error;
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
     logger.warn({ error: metaError, to }, "⚠️ Failed to send typing indicator");
   }
 };
@@ -206,7 +230,10 @@ export const sendTemplateMessage = async (
       error instanceof Error
         ? (error as any).response?.data ?? error.message
         : error;
-    logger.error({ error: metaError, to, templateName }, "❌ Failed to send template message");
+    logger.error(
+      { error: metaError, to, templateName },
+      "❌ Failed to send template message"
+    );
     return false;
   }
 };
@@ -241,15 +268,15 @@ export const sendLeadNotification = async (
   };
 
   const bodyParams = [
-    businessName,                                              
-    lead.name ?? "Unknown",                                     
-    `+${lead.phone}`,                                           
-    lead.propertyType ?? "N/A",                                 
-    lead.bhk ?? "",                                             
-    lead.location ?? "N/A",                                     
-    lead.budget ?? "N/A",                                       
-    lead.purpose ? (purposeMap[lead.purpose] ?? lead.purpose) : "N/A", 
-    lead.timeline ? (timelineMap[lead.timeline] ?? lead.timeline) : "N/A", 
+    businessName,
+    lead.name ?? "Unknown",
+    `+${lead.phone}`,
+    lead.propertyType ?? "N/A",
+    lead.bhk ?? "",
+    lead.location ?? "N/A",
+    lead.budget ?? "N/A",
+    lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A",
+    lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A",
   ];
 
   try {
@@ -263,6 +290,9 @@ export const sendLeadNotification = async (
     );
     logger.info({ brokerPhone }, "✅ Lead notification sent via template");
   } catch (error) {
-    logger.error({ error, brokerPhone }, "❌ Failed to send lead notification via template");
+    logger.error(
+      { error, brokerPhone },
+      "❌ Failed to send lead notification via template"
+    );
   }
 };

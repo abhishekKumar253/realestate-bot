@@ -44,7 +44,14 @@ const verifyToken = getArg("--verifyToken");
 const phoneNumber = getArg("--phone");
 const systemPrompt = getArg("--systemPrompt") ?? null;
 
-if (!businessName || !phoneNumberId || !accessToken || !wabaId || !verifyToken || !phoneNumber) {
+if (
+  !businessName ||
+  !phoneNumberId ||
+  !accessToken ||
+  !wabaId ||
+  !verifyToken ||
+  !phoneNumber
+) {
   console.error(`
 ❌ Missing required arguments.
 
@@ -79,7 +86,9 @@ const main = async () => {
     });
 
     if (existing) {
-      console.log(`⚠️  Builder already exists: ${existing.businessName} (${existing.id})`);
+      console.log(
+        `⚠️  Builder already exists: ${existing.businessName} (${existing.id})`
+      );
       return;
     }
 
