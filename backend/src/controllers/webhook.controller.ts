@@ -43,7 +43,6 @@ import { prisma } from "../db/prisma";
 import {
   REQUIRED_LEAD_FIELDS,
   SITE_VISIT_AFFIRMATIVE_PATTERNS,
-  GREETING_WORDS,
   OPT_OUT_PHRASES,
 } from "../constants/conversation.constants";
 
@@ -319,12 +318,6 @@ async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
   return false;
 }
 
-// ✅ Using constants for greetings
-function cleanContactName(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  return GREETING_WORDS.has(raw.toLowerCase().trim()) ? undefined : raw;
-}
-
 // ✅ Using constants for opt‑out phrases
 async function handleOptOut(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
@@ -407,8 +400,8 @@ export const handleIncoming = async (
     // 4. Duplicate check
     if (await isDuplicate(message.id)) return;
 
-    // 5. Clean contact name & create/retrieve lead
-    const contactName = cleanContactName(extractContactName(body) ?? undefined);
+    // 5. Use WhatsApp profile name directly (no filtering)
+    const contactName = extractContactName(body) ?? undefined;
     logger.info(
       { phone, builderId: builder.id, message: userText },
       "📩 Incoming message"
