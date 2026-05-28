@@ -33,7 +33,7 @@ export const getOrCreateLead = async (
       where: {
         phone_builderId: { phone, builderId }, // composite unique key
       },
-      update: {},
+      update: {}, // keep existing data, but we'll manually update name below if needed
       create: {
         phone,
         name,
@@ -58,6 +58,19 @@ export const getOrCreateLead = async (
         },
       },
     });
+
+    // ✅ NEW: If WhatsApp profile name is available but lead had no name, update it
+    if (name && !lead.name) {
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { name },
+      });
+      lead.name = name;
+      logger.info(
+        { leadId: lead.id, name },
+        "📛 Lead name updated from WhatsApp profile"
+      );
+    }
 
     if (lead.createdAt.getTime() === lead.updatedAt.getTime()) {
       logger.info({ phone, builderId }, "✅ New lead created");
