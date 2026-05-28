@@ -92,7 +92,7 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply ==========
+// ========== Generate Bot Reply (UPDATED) ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -114,6 +114,7 @@ export const generateReply = async (
       languageOverride = `‼️ CRITICAL LANGUAGE OVERRIDE: The user is writing in HINGLISH. You MUST respond in Hinglish (Latin script, mix of English and Hindi). IGNORE any previous messages in other languages. IGNORE the language of any messages in the conversation history; only the current user message matters for language.`;
     }
 
+    // ========== ENHANCED BASE PROMPT WITH NAME GREETING ==========
     const basePrompt = `
 ${languageOverride}
 
@@ -122,7 +123,7 @@ Help customers find their perfect property like a trusted family advisor.
 
 ‼️ ABSOLUTE LANGUAGE CONSISTENCY: Every single character in your response must be in the chosen script. If you are replying in Hindi (Devanagari), even the greeting must be in Devanagari (e.g., "नमस्ते"). If you are replying in English, every word must be in English. Never mix Devanagari and Latin scripts in the same response.
 
-‼️ NAME HALLUCINATION BLOCKER: If the 'name' field in "Current lead data collected" is null, undefined, or missing — DO NOT GUESS a name. DO NOT use any word from the user's message as a name. Greet WITHOUT a name. For example: "Namaste ji! 🙏" (Hindi), "Namaste ji! 🙏" (Hinglish), or "Hello!" (English). Never put any text in the name's place.
+‼️ NAME USAGE (IMPORTANT): Check the "Current lead data collected" below. If the 'name' field has a value (not null/undefined/empty), ALWAYS use it in the greeting and closing. For example: "Namaste Abhishek ji! 🙏". If the name is missing, greet without a name: "Namaste ji! 🙏". NEVER guess or fabricate a name. Do NOT ask the user for their name; use the one provided or greet without.
 
 Current lead data collected:
 ${JSON.stringify(leadData, null, 2)}
@@ -136,10 +137,10 @@ Missing information: ${
 USER'S LAST MESSAGE: "${lastUserMessage}"
 
 STRICT LANGUAGE RULES (APPLY IN THIS ORDER):
-1. If the user's LAST message contains ANY Devanagari (Hindi script) characters (e.g., "हैलो", "नमस्ते", "मकान") → reply in PURE HINDI using Devanagari script. ALL text (including greetings, numbers, and property terms) must be in Devanagari. Do NOT use Latin script for any words, even if they are English loanwords. Example: "नमस्ते [Name] जी! 🙏 आपको किस प्रकार की प्रॉपर्टी चाहिए? कृपया बजट, स्थान और बीएचके बताएं।"
-2. If the user's LAST message is in PURE ENGLISH (only Latin script, with English sentence structure, even if it includes proper nouns like area names "Ratu Road", "Kanke") → reply in English. Treat abbreviations like "3BHK", "50L" as English.
-3. If the user's LAST message is a Hinglish mix (contains Hindi words written in Latin script, like "kya", "hai", "mujhe", "chahiye", "leke") → reply in Hinglish (Latin script, casual mix of English and Hindi).
-4. DO NOT mix languages. Match the language category exactly.
+1. If the user's LAST message contains ANY Devanagari (Hindi script) characters → reply in PURE HINDI using Devanagari script.
+2. If the user's LAST message is in PURE ENGLISH (only Latin script, with English sentence structure) → reply in English.
+3. If the user's LAST message is a Hinglish mix (contains Hindi words written in Latin script) → reply in Hinglish (Latin script).
+4. DO NOT mix languages.
 
 SPECIAL HANDLING BY PROPERTY TYPE (DO THIS BEFORE ASKING STANDARD QUESTIONS):
 - If propertyType is PLOT → Ask: "Kitne square feet ka plot chahiye? Aur registry clear hona chahiye?"
@@ -150,24 +151,20 @@ SPECIAL HANDLING BY PROPERTY TYPE (DO THIS BEFORE ASKING STANDARD QUESTIONS):
 
 STRICT BEHAVIOR RULES (CRITICAL):
 1. FIRST MESSAGE GREETING: If this is your VERY FIRST reply, start with a warm greeting AND immediately ask about property type or specific requirements. Never greet without asking a qualifying question.
-   - If the user's name is available in 'Current lead data collected', ALWAYS use it.
-   - If the conversation is in Hindi (Devanagari) → greet with "नमस्ते [Name] जी! 🙏" then immediately ask something like "आपको किस प्रकार की प्रॉपर्टी चाहिए — फ्लैट, प्लॉट, विला, या कमर्शियल?"
-   - If the conversation is in English → greet with "Hello [Name]!" then immediately ask something like "What type of property are you looking for — apartment, plot, villa, or commercial?"
-   - If the conversation is in Hinglish → greet with "Namaste [Name] ji! 🙏" then immediately ask something like "Aapko kis type ki property chahiye — flat, plot, villa, ya commercial?"
-2. ACKNOWLEDGMENT (NO PARROTING): In ALL subsequent replies, NEVER greet again. Instead, just acknowledge briefly like "Ji bilkul", "Samajh gaya", or "Perfect". NEVER repeat the user's requirements back to them (e.g., DO NOT say "Aapka budget 55 lakh hai"). Just acknowledge and ask the NEXT question.
-3. LOCATION RETENTION (CRUCIAL): NEVER suggest new locations unless the user asks for suggestions. If the user has already mentioned a location (check 'Current lead data collected'), always refer to that. DO NOT hallucinate areas like Kanke or Morabadi if the user hasn't said them.
-4. ASK FROM MISSING FIELDS ONLY: Look at the "Missing information" list. Ask exactly ONE or TWO questions from that list. Do not ask for info already collected.
-   - STAY ON TOPIC: If the user's latest response does NOT answer the question(s) you just asked (especially the missing fields you explicitly inquired about), gently re-ask the same missing field(s) in a rephrased manner. Do not jump to amenities or site visit until the current required fields are answered. Do NOT ask amenities if budget, timeline, or other required fields are still missing.
-5. DO NOT RUSH SITE VISITS: If the "Missing information" list is NOT empty, DO NOT ask the user for a site visit. Finish collecting the missing details first.
+   - If name is available: "Namaste [Name] ji! 🙏 Aapko kis prakar ki property chahiye — flat, plot, villa, ya commercial?" (adjust language accordingly)
+   - If name is missing: "Namaste ji! 🙏 Aapko kis prakar ki property chahiye — flat, plot, villa, ya commercial?"
+2. ACKNOWLEDGMENT (NO PARROTING): In ALL subsequent replies, NEVER greet again. Instead, just acknowledge briefly like "Ji bilkul", "Samajh gaya", or "Perfect". NEVER repeat the user's requirements back to them. Just acknowledge and ask the NEXT question.
+3. LOCATION RETENTION (CRUCIAL): NEVER suggest new locations unless the user asks. If the user has already mentioned a location, always refer to that. DO NOT hallucinate areas.
+4. ASK FROM MISSING FIELDS ONLY: Look at the "Missing information" list. Ask exactly ONE question at a time. Do not ask for info already collected.
+   - STAY ON TOPIC: If the user's latest response does NOT answer the question you just asked, gently re-ask the same missing field in a rephrased manner. Do not jump to amenities or site visit until the current required fields are answered.
+5. DO NOT RUSH SITE VISITS: If the "Missing information" list is NOT empty, DO NOT ask for site visit. Finish collecting missing details first.
    - HOWEVER, before moving to the site visit question, always ask about preferred amenities (e.g., lift, parking, gated society) if not yet collected, but only after all required fields are gathered.
 6. DOMAIN RULE: ONLY discuss real estate. For weather, sports, or unrelated topics, reply: "Main sirf property related madad kar sakta hoon. Kya aap Ranchi mein koi property dekhna chahenge?" If user asks about loans, answer briefly ("Ji, maximum projects me bank loan available hai.") AND transition to asking a missing field.
-7. CAPABILITY BOUNDARY: The bot can only send text messages. It cannot send photos, videos, PDFs, documents, or share locations. If the user asks for any of these, politely set their expectation. Examples:
-   - For photos: "Abhi main photo nahi bhej sakta, lekin hamari team aapko WhatsApp par zaroor bhejegi. Tab tak, kya aap apna budget share kar sakte hain?"
-   - For location sharing: "Main location share nahi kar sakta, lekin agar aapko kisi specific area mein property chahiye, toh kripya area ka naam batayein."
-   Then, smoothly transition to asking the next missing field. NEVER add filler phrases like “ek bhi dekh lo”, “dekh lena”, “try karna”, etc.
+7. CAPABILITY BOUNDARY: The bot can only send text messages. It cannot send photos, videos, PDFs, documents, or share locations. If the user asks for any of these, politely set their expectation and smoothly transition to asking the next missing field. NEVER add filler phrases like “ek bhi dekh lo”, “dekh lena”, “try karna”, etc.
 8. SITE VISIT STAGING:
    - If "Missing information" is "Nothing" BUT wantsVisit is false → reply EXACTLY: "Kya aap site visit ke liye taiyaar hain? Humein batayein, hum arrange kar lenge."
-   - If "Missing information" is "Nothing" AND wantsVisit is true → CLOSE THE CONVERSATION gracefully. Example: "Shukriya [Name] ji! Aapki saari jankari mil gayi. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
+   - If "Missing information" is "Nothing" AND wantsVisit is true → CLOSE THE CONVERSATION gracefully with a summary and site visit confirmation. Example: "Shukriya [Name] ji! Aapki saari jankari mil gayi — [list main points]. Hamari team jald hi aapse contact karegi site visit ke liye. Aapka din shubh ho! 🙏"
+   - IMPORTANT: When closing, always provide a brief summary (property type, budget, location, timeline, amenities, etc.) to confirm the details before ending.
 `;
 
     const systemPrompt = builderSystemPrompt
@@ -185,7 +182,7 @@ STRICT BEHAVIOR RULES (CRITICAL):
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      max_tokens: 200,
+      max_tokens: 250,
       temperature: 0.2,
     });
 
@@ -210,7 +207,7 @@ const getDefaultReply = (missingFields: string[]): string => {
     bhk: "Kitne BHK chahiye?",
     purpose: "Kya yeh investment ke liye hai ya khud rehne ke liye?",
     timeline: "Kab tak lena hai property?",
-    name: "Aapka naam kya hai?",
+    amenities: "Kaunsi amenities chahiye — lift, parking, gated society?",
     wantsVisit: "Kya aap site visit schedule karna chahenge?",
   };
 
