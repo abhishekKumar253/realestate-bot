@@ -48,14 +48,18 @@ const HINGLISH_WORDS = new Set([
 export const detectLanguage = (text: string): "hindi" | "english" | "hinglish" => {
   if (/[\u0900-\u097F]/.test(text)) return "hindi";
 
-  // Short greetings — default to hinglish
-  const trimmed = text.trim().toLowerCase();
-  if (trimmed.length <= 6) return "hinglish";
+  const lowerText = text.toLowerCase().trim();
+  const words = lowerText.split(/\s+/);
 
-  const words = text.toLowerCase().split(/\s+/);
+  const casualGreetings = ["hi", "hii", "hello", "hey", "hlo", "helo", "namaste", "namaskar", "ram ram"];
+  if (casualGreetings.includes(words[0]) && words.length <= 2) {
+    return "hinglish";
+  }
+
+  // If more than 0 Hinglish words → Hinglish
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
+  if (hinglishCount > 0) return "hinglish";
 
-  if (hinglishCount >= 1) return "hinglish";
-
+  // Default to English
   return "english";
 };
