@@ -194,3 +194,24 @@ export const getLeadSummary = async (leadId: string) => {
     throw error;
   }
 };
+
+// ========== Create New Conversation (Reset) ==========
+export const createNewConversation = async (leadId: string) => {
+  try {
+    const conversation = await prisma.conversation.create({
+      data: {
+        leadId,
+        state: ConversationState.GREETING,
+      },
+      include: {
+        messages: true,
+      },
+    });
+
+    logger.info({ leadId }, "✅ New conversation created (reset)");
+    return conversation;
+  } catch (error) {
+    logger.error({ error, leadId }, "❌ Failed to create new conversation");
+    throw error;
+  }
+};

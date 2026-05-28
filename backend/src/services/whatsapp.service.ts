@@ -162,6 +162,55 @@ export const sendTypingIndicator = async (
   }
 };
 
+// ========== Send Template Message ==========
+export const sendTemplateMessage = async (
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  templateName: string,
+  languageCode: string,
+  bodyParams: string[]
+): Promise<boolean> => {
+  try {
+    const payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: [
+          {
+            type: "body",
+            parameters: bodyParams.map((text) => ({
+              type: "text",
+              text,
+            })),
+          },
+        ],
+      },
+    };
+
+    const response = await axios.post(getApiUrl(phoneNumberId), payload, {
+      headers: getHeaders(accessToken),
+    });
+
+    logger.info(
+      { to, templateName, messageId: response.data.messages?.[0]?.id },
+      "✅ Template message sent"
+    );
+    return true;
+  } catch (error: unknown) {
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
+    logger.error({ error: metaError, to, templateName }, "❌ Failed to send template message");
+    return false;
+  }
+};
+
 // ========== Send Lead Notification to Broker ==========
 export const sendLeadNotification = async (
   phoneNumberId: string,
@@ -191,24 +240,29 @@ export const sendLeadNotification = async (
     END_USE: "Khud rehne ke liye",
   };
 
-  const message = `
-🏠 *New Lead — ${businessName}*
-
-👤 *Naam:* ${lead.name ?? "Unknown"}
-📞 *Phone:* +${lead.phone}
-🏡 *Property:* ${lead.propertyType ?? "N/A"} ${lead.bhk ? `(${lead.bhk})` : ""}
-📍 *Location:* ${lead.location ?? "N/A"}
-💰 *Budget:* ${lead.budget ?? "N/A"}
-🎯 *Purpose:* ${lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A"}
-⏰ *Timeline:* ${lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A"}
-
-✅ *Site visit ke liye taiyaar hai!*
-  `.trim();
+  const bodyParams = [
+    businessName,                                              
+    lead.name ?? "Unknown",                                     
+    `+${lead.phone}`,                                           
+    lead.propertyType ?? "N/A",                                 
+    lead.bhk ?? "",                                             
+    lead.location ?? "N/A",                                     
+    lead.budget ?? "N/A",                                       
+    lead.purpose ? (purposeMap[lead.purpose] ?? lead.purpose) : "N/A", 
+    lead.timeline ? (timelineMap[lead.timeline] ?? lead.timeline) : "N/A", 
+  ];
 
   try {
-    await sendTextMessage(phoneNumberId, accessToken, brokerPhone, message);
-    logger.info({ brokerPhone }, "✅ Lead notification sent to broker");
+    await sendTemplateMessage(
+      phoneNumberId,
+      accessToken,
+      brokerPhone,
+      "lead_notification_ranchi_real_estate",
+      "en",
+      bodyParams
+    );
+    logger.info({ brokerPhone }, "✅ Lead notification sent via template");
   } catch (error) {
-    logger.error({ error, brokerPhone }, "❌ Failed to send lead notification");
+    logger.error({ error, brokerPhone }, "❌ Failed to send lead notification via template");
   }
 };

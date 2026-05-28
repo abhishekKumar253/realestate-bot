@@ -15,6 +15,7 @@ import {
   saveMessage,
   getConversationHistory,
   updateLeadStatus,
+  createNewConversation,
 } from "../services/lead.service";
 import {
   extractLeadData,
@@ -145,16 +146,13 @@ async function processIncomingMessage(
     extracted.wantsVisit = false;
   }
 
-  // 4. Save user message
   await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
 
-  // 5. Update lead
   const updateData = buildUpdateData(extracted);
   const freshLead = Object.keys(updateData).length > 0
     ? await updateLead(lead.id, updateData)
     : lead;
 
-  // 6. Missing fields
   const mergedLead = {
     propertyType: freshLead.propertyType,
     budget: freshLead.budget,
@@ -174,11 +172,9 @@ async function processIncomingMessage(
 
   const finalState = newState;
 
-  // 7. Status + state update + broker notification
   if (finalState === ConversationState.COMPLETED && missingFields.length === 0) {
     await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
 
-    // CHANGED: broker ko notification bhejo
     if (builder.notificationPhone) {
       await sendLeadNotification(
         builder.phoneNumberId,
@@ -203,7 +199,6 @@ async function processIncomingMessage(
 
   await updateConversationState(conversation.id, finalState);
 
-  // 8. Typing indicator
   await sendTypingIndicator(
     builder.phoneNumberId,
     builder.accessToken,
@@ -211,7 +206,6 @@ async function processIncomingMessage(
     whatsappMessageId
   ).catch((err) => logger.warn({ err }, "⚠️ Typing indicator failed"));
 
-  // 9. Generate reply
   const userLanguage = detectLanguage(userText);
 
   const reply = await generateReply(
@@ -232,7 +226,6 @@ async function processIncomingMessage(
     userLanguage
   );
 
-  // 10. Send reply
   const isSent = await sendTextMessage(builder.phoneNumberId, builder.accessToken, phone, reply);
   if (isSent) {
     await saveMessage(conversation.id, MessageRole.BOT, reply);
@@ -288,10 +281,19 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
       .catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
     const lead = await getOrCreateLead(phone, builder.id, contactName);
-    const conversation = lead.conversations[0];
+
+    // CHANGED: COMPLETED state mein naya conversation banao — reset
+    let conversation = lead.conversations[0];
+
     if (!conversation) {
       logger.error({ phone }, "❌ No conversation found");
       return;
+    }
+
+    if (conversation.state === ConversationState.COMPLETED) {
+      logger.info({ phone }, "🔄 Conversation reset — new conversation starting");
+      conversation = await createNewConversation(lead.id);
+      await updateLeadStatus(lead.id, LeadStatus.NEW);
     }
 
     await processIncomingMessage(phone, userText, message.id, lead, conversation, builder);
