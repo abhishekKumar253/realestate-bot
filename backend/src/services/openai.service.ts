@@ -129,7 +129,11 @@ Help customers find their perfect property like a trusted family advisor.
 Current lead data collected:
 ${JSON.stringify(leadData, null, 2)}
 
-Missing information: ${missingFields.length > 0 ? missingFields.join(", ") : "Nothing — all data collected!"}
+Missing information: ${
+      missingFields.length > 0
+        ? missingFields.join(", ")
+        : "Nothing — all data collected!"
+    }
 
 USER'S LAST MESSAGE: "${lastUserMessage}"
 
@@ -147,11 +151,11 @@ SPECIAL HANDLING BY PROPERTY TYPE (DO THIS BEFORE ASKING STANDARD QUESTIONS):
    * BEFORE offering a site visit (i.e., when ALL required fields like budget, timeline, location, etc. are collected and only 0–1 missing remain), ask about amenities. If the user hasn't answered a directly asked required field yet, first re-ask that field.
 
 STRICT BEHAVIOR RULES (CRITICAL):
-1. FIRST MESSAGE GREETING: If this is your VERY FIRST reply, start with a warm greeting.
+1. FIRST MESSAGE GREETING: If this is your VERY FIRST reply, start with a warm greeting AND immediately ask about property type or specific requirements. Never greet without asking a qualifying question.
    - If the user's name is available in 'Current lead data collected', ALWAYS use it.
-   - If the conversation is in Hindi (Devanagari) → greet with "नमस्ते [Name] जी! 🙏"
-   - If the conversation is in English → greet with "Hello [Name]!"
-   - If the conversation is in Hinglish → greet with "Namaste [Name] ji! 🙏"
+   - If the conversation is in Hindi (Devanagari) → greet with "नमस्ते [Name] जी! 🙏" then immediately ask something like "आपको किस प्रकार की प्रॉपर्टी चाहिए — फ्लैट, प्लॉट, विला, या कमर्शियल?"
+   - If the conversation is in English → greet with "Hello [Name]!" then immediately ask something like "What type of property are you looking for — apartment, plot, villa, or commercial?"
+   - If the conversation is in Hinglish → greet with "Namaste [Name] ji! 🙏" then immediately ask something like "Aapko kis type ki property chahiye — flat, plot, villa, ya commercial?"
 2. ACKNOWLEDGMENT (NO PARROTING): In ALL subsequent replies, NEVER greet again. Instead, just acknowledge briefly like "Ji bilkul", "Samajh gaya", or "Perfect". NEVER repeat the user's requirements back to them (e.g., DO NOT say "Aapka budget 55 lakh hai"). Just acknowledge and ask the NEXT question.
 3. LOCATION RETENTION (CRUCIAL): NEVER suggest new locations unless the user asks for suggestions. If the user has already mentioned a location (check 'Current lead data collected'), always refer to that. DO NOT hallucinate areas like Kanke or Morabadi if the user hasn't said them.
 4. ASK FROM MISSING FIELDS ONLY: Look at the "Missing information" list. Ask exactly ONE or TWO questions from that list. Do not ask for info already collected.
@@ -198,7 +202,8 @@ STRICT BEHAVIOR RULES (CRITICAL):
 // ========== Default Reply (OpenAI unavailable) ==========
 const getDefaultReply = (missingFields: string[]): string => {
   const fieldMessages: Record<string, string> = {
-    propertyType: "Aap kaunsi property dekhna chahte hain? Flat, Plot, Villa ya Commercial?",
+    propertyType:
+      "Aap kaunsi property dekhna chahte hain? Flat, Plot, Villa ya Commercial?",
     budget: "Aapka budget kya hai?",
     location: "Ranchi mein kaunsa area prefer karenge?",
     bhk: "Kitne BHK chahiye?",
@@ -210,6 +215,6 @@ const getDefaultReply = (missingFields: string[]): string => {
 
   const field = missingFields[0];
   return field
-    ? (fieldMessages[field] ?? "Kya aur kuch batana chahenge?")
+    ? fieldMessages[field] ?? "Kya aur kuch batana chahenge?"
     : "Shukriya! Hamara agent aapko jald contact karega. 🙏";
 };

@@ -28,13 +28,22 @@ import {
   sendTypingIndicator,
   sendLeadNotification,
 } from "../services/whatsapp.service";
-import { getBuilderByPhoneNumberId, type BuilderWithToken } from "../services/builder.service";
+import {
+  getBuilderByPhoneNumberId,
+  type BuilderWithToken,
+} from "../services/builder.service";
 import logger from "../utils/logger";
-import type { WhatsAppWebhookPayload, IncomingMessage } from "../types/whatsapp.types";
+import type {
+  WhatsAppWebhookPayload,
+  IncomingMessage,
+} from "../types/whatsapp.types";
 import { prisma } from "../db/prisma";
 
 // ========== GET — Meta Webhook Verification ==========
-export const handleVerification = async (req: Request, res: Response): Promise<void> => {
+export const handleVerification = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"] as string;
   const challenge = req.query["hub.challenge"];
@@ -61,11 +70,14 @@ export const handleVerification = async (req: Request, res: Response): Promise<v
 // ========== Helpers ==========
 const getUserText = (msg: IncomingMessage): string => {
   if (msg.type === "text") return msg.text?.body ?? "";
-  if (msg.type === "interactive") return msg.interactive?.button_reply?.title ?? "";
+  if (msg.type === "interactive")
+    return msg.interactive?.button_reply?.title ?? "";
   return "";
 };
 
-const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> => {
+const buildUpdateData = (
+  extracted: ExtractedLeadData
+): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
   if (extracted.name) data.name = extracted.name;
   if (extracted.propertyType) data.propertyType = extracted.propertyType;
@@ -78,7 +90,15 @@ const buildUpdateData = (extracted: ExtractedLeadData): Record<string, unknown> 
 };
 
 const getMissingFields = (lead: Record<string, unknown>): string[] => {
-  const required = ["propertyType", "budget", "location", "bhk", "purpose", "timeline", "name"];
+  const required = [
+    "propertyType",
+    "budget",
+    "location",
+    "bhk",
+    "purpose",
+    "timeline",
+    "name",
+  ];
   return required.filter((f) => !lead[f]);
 };
 
@@ -121,12 +141,17 @@ async function processIncomingMessage(
   userText: string,
   whatsappMessageId: string,
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
-  conversation: NonNullable<Awaited<ReturnType<typeof getOrCreateLead>>["conversations"][0]>,
+  conversation: NonNullable<
+    Awaited<ReturnType<typeof getOrCreateLead>>["conversations"][0]
+  >,
   builder: BuilderWithToken
 ): Promise<void> {
   const history = await getConversationHistory(conversation.id);
   const historyForOpenAI = history.map((msg) => ({
-    role: msg.role === MessageRole.USER ? ("user" as const) : ("assistant" as const),
+    role:
+      msg.role === MessageRole.USER
+        ? ("user" as const)
+        : ("assistant" as const),
     content: msg.content,
   }));
 
@@ -135,23 +160,56 @@ async function processIncomingMessage(
   if (conversation.state === ConversationState.ASK_SITE_VISIT) {
     const lowerMsg = userText.toLowerCase().trim();
     const affirmativePatterns = [
-      "haan", "ha", "yes", "haan ji", "hanji", "ok", "okay", "ready",
-      "ready hu", "ready hai", "taiyar hai", "taiyar hu", "chalo", "chaliye",
-      "abhi karte hain", "bilkul", "theek hai", "sahi hai", "ji haan",
-      "i am ready", "let's go", "sure", "confirmed", "done", "chalega",
-      "ham ready", "hum ready", "hai taiyaar", "taiyaar h", "taiyar h",
+      "haan",
+      "ha",
+      "yes",
+      "haan ji",
+      "hanji",
+      "ok",
+      "okay",
+      "ready",
+      "ready hu",
+      "ready hai",
+      "taiyar hai",
+      "taiyar hu",
+      "chalo",
+      "chaliye",
+      "abhi karte hain",
+      "bilkul",
+      "theek hai",
+      "sahi hai",
+      "ji haan",
+      "i am ready",
+      "let's go",
+      "sure",
+      "confirmed",
+      "done",
+      "chalega",
+      "ham ready",
+      "hum ready",
+      "hai taiyaar",
+      "taiyaar h",
+      "taiyar h",
     ];
-    extracted.wantsVisit = affirmativePatterns.some((p) => lowerMsg.includes(p));
+    extracted.wantsVisit = affirmativePatterns.some((p) =>
+      lowerMsg.includes(p)
+    );
   } else {
     extracted.wantsVisit = false;
   }
 
-  await saveMessage(conversation.id, MessageRole.USER, userText, whatsappMessageId);
+  await saveMessage(
+    conversation.id,
+    MessageRole.USER,
+    userText,
+    whatsappMessageId
+  );
 
   const updateData = buildUpdateData(extracted);
-  const freshLead = Object.keys(updateData).length > 0
-    ? await updateLead(lead.id, updateData)
-    : lead;
+  const freshLead =
+    Object.keys(updateData).length > 0
+      ? await updateLead(lead.id, updateData)
+      : lead;
 
   const mergedLead = {
     propertyType: freshLead.propertyType,
@@ -172,7 +230,10 @@ async function processIncomingMessage(
 
   const finalState = newState;
 
-  if (finalState === ConversationState.COMPLETED && missingFields.length === 0) {
+  if (
+    finalState === ConversationState.COMPLETED &&
+    missingFields.length === 0
+  ) {
     await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
 
     if (builder.notificationPhone) {
@@ -193,7 +254,10 @@ async function processIncomingMessage(
         builder.businessName
       ).catch((err) => logger.error({ err }, "❌ Broker notification failed"));
     } else {
-      logger.warn({ builderId: builder.id }, "⚠️ No notificationPhone set for builder");
+      logger.warn(
+        { builderId: builder.id },
+        "⚠️ No notificationPhone set for builder"
+      );
     }
   }
 
@@ -226,16 +290,27 @@ async function processIncomingMessage(
     userLanguage
   );
 
-  const isSent = await sendTextMessage(builder.phoneNumberId, builder.accessToken, phone, reply);
+  const isSent = await sendTextMessage(
+    builder.phoneNumberId,
+    builder.accessToken,
+    phone,
+    reply
+  );
   if (isSent) {
     await saveMessage(conversation.id, MessageRole.BOT, reply);
   }
 
-  logger.info({ phone, state: finalState, builderId: builder.id }, "✅ Message processed");
+  logger.info(
+    { phone, state: finalState, builderId: builder.id },
+    "✅ Message processed"
+  );
 }
 
 // ========== POST — Incoming Messages ==========
-export const handleIncoming = async (req: Request, res: Response): Promise<void> => {
+export const handleIncoming = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   res.status(200).json({ status: "ok" });
 
   try {
@@ -260,7 +335,20 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
 
     const message = extractMessage(body);
     if (!message) return;
-    if (message.type !== "text" && message.type !== "interactive") return;
+    if (message.type !== "text" && message.type !== "interactive") {
+      const phone = normalizePhone(message.from);
+      const fallbackMsg =
+        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye.";
+
+      await sendTextMessage(
+        builder.phoneNumberId,
+        builder.accessToken,
+        phone,
+        fallbackMsg
+      ).catch((err) => logger.warn({ err }, "Failed to send fallback message"));
+
+      return;
+    }
 
     const phone = normalizePhone(message.from);
     const userText = getUserText(message);
@@ -275,10 +363,16 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     }
 
     const contactName = extractContactName(body) ?? undefined;
-    logger.info({ phone, builderId: builder.id, message: userText }, "📩 Incoming message");
+    logger.info(
+      { phone, builderId: builder.id, message: userText },
+      "📩 Incoming message"
+    );
 
-    await markAsRead(builder.phoneNumberId, builder.accessToken, message.id)
-      .catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
+    await markAsRead(
+      builder.phoneNumberId,
+      builder.accessToken,
+      message.id
+    ).catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
     const lead = await getOrCreateLead(phone, builder.id, contactName);
 
@@ -291,12 +385,22 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     }
 
     if (conversation.state === ConversationState.COMPLETED) {
-      logger.info({ phone }, "🔄 Conversation reset — new conversation starting");
+      logger.info(
+        { phone },
+        "🔄 Conversation reset — new conversation starting"
+      );
       conversation = await createNewConversation(lead.id);
       await updateLeadStatus(lead.id, LeadStatus.NEW);
     }
 
-    await processIncomingMessage(phone, userText, message.id, lead, conversation, builder);
+    await processIncomingMessage(
+      phone,
+      userText,
+      message.id,
+      lead,
+      conversation,
+      builder
+    );
   } catch (error) {
     logger.error({ error }, "❌ Error processing message");
     Sentry.captureException(error);
