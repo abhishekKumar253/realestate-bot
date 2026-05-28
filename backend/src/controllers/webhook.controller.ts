@@ -25,6 +25,7 @@ import {
   sendTextMessage,
   markAsRead,
   sendTypingIndicator,
+  sendLeadNotification,
 } from "../services/whatsapp.service";
 import { getBuilderByPhoneNumberId, type BuilderWithToken } from "../services/builder.service";
 import logger from "../utils/logger";
@@ -173,10 +174,33 @@ async function processIncomingMessage(
 
   const finalState = newState;
 
-  // 7. Status + state update
+  // 7. Status + state update + broker notification
   if (finalState === ConversationState.COMPLETED && missingFields.length === 0) {
     await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
+
+    // CHANGED: broker ko notification bhejo
+    if (builder.notificationPhone) {
+      await sendLeadNotification(
+        builder.phoneNumberId,
+        builder.accessToken,
+        builder.notificationPhone,
+        {
+          name: mergedLead.name,
+          phone: lead.phone,
+          propertyType: mergedLead.propertyType,
+          budget: mergedLead.budget,
+          location: mergedLead.location,
+          bhk: mergedLead.bhk,
+          purpose: mergedLead.purpose,
+          timeline: mergedLead.timeline,
+        },
+        builder.businessName
+      ).catch((err) => logger.error({ err }, "❌ Broker notification failed"));
+    } else {
+      logger.warn({ builderId: builder.id }, "⚠️ No notificationPhone set for builder");
+    }
   }
+
   await updateConversationState(conversation.id, finalState);
 
   // 8. Typing indicator
@@ -249,7 +273,6 @@ export const handleIncoming = async (req: Request, res: Response): Promise<void>
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // Duplicate check
     const existingMsg = await prisma.message.findUnique({
       where: { whatsappMessageId: message.id },
     });

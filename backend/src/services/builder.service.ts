@@ -21,6 +21,7 @@ export interface BuilderWithToken {
   wabaId: string;
   verifyToken: string | null;
   phoneNumber: string | null;
+  notificationPhone: string | null;
   systemPrompt: string | null;
   isActive: boolean;
 }

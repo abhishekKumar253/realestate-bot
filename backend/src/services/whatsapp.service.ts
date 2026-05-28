@@ -161,3 +161,54 @@ export const sendTypingIndicator = async (
     logger.warn({ error: metaError, to }, "⚠️ Failed to send typing indicator");
   }
 };
+
+// ========== Send Lead Notification to Broker ==========
+export const sendLeadNotification = async (
+  phoneNumberId: string,
+  accessToken: string,
+  brokerPhone: string,
+  lead: {
+    name?: string | null;
+    phone: string;
+    propertyType?: string | null;
+    budget?: string | null;
+    location?: string | null;
+    bhk?: string | null;
+    purpose?: string | null;
+    timeline?: string | null;
+  },
+  businessName: string
+): Promise<void> => {
+  const timelineMap: Record<string, string> = {
+    ONE_MONTH: "1 mahine mein",
+    THREE_MONTHS: "3 mahine mein",
+    SIX_MONTHS: "6 mahine mein",
+    MORE_THAN_SIX_MONTHS: "6 mahine ke baad",
+  };
+
+  const purposeMap: Record<string, string> = {
+    INVESTMENT: "Investment",
+    END_USE: "Khud rehne ke liye",
+  };
+
+  const message = `
+🏠 *New Lead — ${businessName}*
+
+👤 *Naam:* ${lead.name ?? "Unknown"}
+📞 *Phone:* +${lead.phone}
+🏡 *Property:* ${lead.propertyType ?? "N/A"} ${lead.bhk ? `(${lead.bhk})` : ""}
+📍 *Location:* ${lead.location ?? "N/A"}
+💰 *Budget:* ${lead.budget ?? "N/A"}
+🎯 *Purpose:* ${lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A"}
+⏰ *Timeline:* ${lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A"}
+
+✅ *Site visit ke liye taiyaar hai!*
+  `.trim();
+
+  try {
+    await sendTextMessage(phoneNumberId, accessToken, brokerPhone, message);
+    logger.info({ brokerPhone }, "✅ Lead notification sent to broker");
+  } catch (error) {
+    logger.error({ error, brokerPhone }, "❌ Failed to send lead notification");
+  }
+};
