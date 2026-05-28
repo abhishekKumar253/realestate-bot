@@ -306,7 +306,132 @@ async function processIncomingMessage(
   );
 }
 
-// ========== POST — Incoming Messages ==========
+// ========== Refactored handleIncoming with reduced cognitive complexity ==========
+
+async function fetchActiveBuilder(
+  phoneNumberId: string
+): Promise<BuilderWithToken | null> {
+  const builder = await getBuilderByPhoneNumberId(phoneNumberId);
+  if (!builder) {
+    logger.error({ phoneNumberId }, "❌ No active builder found");
+    return null;
+  }
+  if (!builder.isActive) {
+    logger.warn({ builderId: builder.id }, "⚠️ Builder inactive — ignoring");
+    return null;
+  }
+  return builder;
+}
+
+// Helper: send fallback message for unsupported message types
+async function sendFallbackIfNeeded(
+  message: IncomingMessage,
+  builder: BuilderWithToken
+): Promise<boolean> {
+  if (message.type !== "text" && message.type !== "interactive") {
+    await sendTextMessage(
+      builder.phoneNumberId,
+      builder.accessToken,
+      normalizePhone(message.from),
+      "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
+    );
+    return true;
+  }
+  return false;
+}
+
+// Helper: check for duplicate message
+async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
+  const existing = await prisma.message.findUnique({
+    where: { whatsappMessageId },
+  });
+  if (existing) {
+    logger.info({ messageId: whatsappMessageId }, "⚠️ Duplicate — skipping");
+    return true;
+  }
+  return false;
+}
+
+// Helper: clean contact name (filter out casual greetings)
+function cleanContactName(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const greetingSet = new Set([
+    "hi",
+    "hii",
+    "hello",
+    "hey",
+    "hlo",
+    "helo",
+    "namaste",
+    "namaskar",
+    "ram ram",
+    "pranam",
+  ]);
+  return greetingSet.has(raw.toLowerCase().trim()) ? undefined : raw;
+}
+
+// Helper: handle opt-out logic; returns true if request should be terminated
+async function handleOptOut(
+  lead: Awaited<ReturnType<typeof getOrCreateLead>>,
+  userText: string,
+  builder: BuilderWithToken,
+  phone: string
+): Promise<boolean> {
+  if (lead.status === LeadStatus.LOST) {
+    logger.info({ phone }, "⚠️ Lead is LOST — ignoring message");
+    return true;
+  }
+
+  const optOutPhrases = [
+    "stop",
+    "band karo",
+    "unsubscribe",
+    "don't contact",
+    "hato",
+    "delete karo",
+    "remove me",
+    "quit",
+    "exit",
+    "no more messages",
+  ];
+  const lowerText = userText.toLowerCase().trim();
+
+  if (optOutPhrases.some((phrase) => lowerText.includes(phrase))) {
+    await updateLeadStatus(lead.id, LeadStatus.LOST);
+    await sendTextMessage(
+      builder.phoneNumberId,
+      builder.accessToken,
+      phone,
+      "Aapka number hamare system se hata diya gaya hai. Aapko ab koi message nahi milega. Dhanyavaad."
+    ).catch((err) =>
+      logger.warn({ err }, "Failed to send opt‑out confirmation")
+    );
+    return true;
+  }
+
+  return false;
+}
+
+// Helper: get active conversation (reset if COMPLETED)
+async function getActiveConversation(
+  lead: Awaited<ReturnType<typeof getOrCreateLead>>,
+  phone: string
+) {
+  let conversation = lead.conversations[0];
+  if (!conversation) {
+    logger.error({ phone }, "❌ No conversation found");
+    throw new Error("No conversation found");
+  }
+
+  if (conversation.state === ConversationState.COMPLETED) {
+    logger.info({ phone }, "🔄 Conversation reset — new conversation starting");
+    conversation = await createNewConversation(lead.id);
+    await updateLeadStatus(lead.id, LeadStatus.NEW);
+  }
+  return conversation;
+}
+
+// ========== POST — Incoming Messages (main handler) ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -317,66 +442,31 @@ export const handleIncoming = async (
     const body = req.body as WhatsAppWebhookPayload;
     if (body.object !== "whatsapp_business_account") return;
 
+    // 1. Identify builder
     const phoneNumberId = extractPhoneNumberId(body);
     if (!phoneNumberId) {
       logger.warn("No phone_number_id in webhook");
       return;
     }
 
-    const builder = await getBuilderByPhoneNumberId(phoneNumberId);
-    if (!builder) {
-      logger.error({ phoneNumberId }, "❌ No active builder found");
-      return;
-    }
-    if (!builder.isActive) {
-      logger.warn({ builderId: builder.id }, "⚠️ Builder inactive — ignoring");
-      return;
-    }
+    const builder = await fetchActiveBuilder(phoneNumberId);
+    if (!builder) return;
 
+    // 2. Extract message & handle non‑text
     const message = extractMessage(body);
     if (!message) return;
-    if (message.type !== "text" && message.type !== "interactive") {
-      await sendTextMessage(
-        builder.phoneNumberId,
-        builder.accessToken,
-        normalizePhone(message.from),
-        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
-      );
-      return;
-    }
+    if (await sendFallbackIfNeeded(message, builder)) return;
 
+    // 3. Normalize phone & text
     const phone = normalizePhone(message.from);
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // Duplicate check
-    const existingMsg = await prisma.message.findUnique({
-      where: { whatsappMessageId: message.id },
-    });
-    if (existingMsg) {
-      logger.info({ messageId: message.id }, "⚠️ Duplicate — skipping");
-      return;
-    }
+    // 4. Duplicate check
+    if (await isDuplicate(message.id)) return;
 
-    // Extract and clean the contact name (filter out casual greetings)
-    const contactNameRaw = extractContactName(body) ?? undefined;
-    const greetingSet = new Set([
-      "hi",
-      "hii",
-      "hello",
-      "hey",
-      "hlo",
-      "helo",
-      "namaste",
-      "namaskar",
-      "ram ram",
-      "pranam",
-    ]);
-    const cleanedName =
-      contactNameRaw && greetingSet.has(contactNameRaw.toLowerCase().trim())
-        ? undefined
-        : contactNameRaw;
-
+    // 5. Clean contact name & create/retrieve lead
+    const contactName = cleanContactName(extractContactName(body) ?? undefined);
     logger.info(
       { phone, builderId: builder.id, message: userText },
       "📩 Incoming message"
@@ -388,58 +478,15 @@ export const handleIncoming = async (
       message.id
     ).catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
-    // Get or create lead with cleaned name
-    const lead = await getOrCreateLead(phone, builder.id, cleanedName);
+    const lead = await getOrCreateLead(phone, builder.id, contactName);
 
-    // --- Opt‑Out Handling ---
-    const optOutPhrases = [
-      "stop",
-      "band karo",
-      "unsubscribe",
-      "don't contact",
-      "hato",
-      "delete karo",
-      "remove me",
-      "quit",
-      "exit",
-      "no more messages",
-    ];
-    const lowerText = userText.toLowerCase().trim();
+    // 6. Opt‑out handling
+    if (await handleOptOut(lead, userText, builder, phone)) return;
 
-    if (lead.status === LeadStatus.LOST) {
-      logger.info({ phone }, "⚠️ Lead is LOST — ignoring message");
-      return;
-    }
+    // 7. Conversation reset (if needed)
+    const conversation = await getActiveConversation(lead, phone);
 
-    // If current message contains opt‑out keywords, mark as LOST and confirm
-    if (optOutPhrases.some((phrase) => lowerText.includes(phrase))) {
-      await updateLeadStatus(lead.id, LeadStatus.LOST);
-      await sendTextMessage(
-        builder.phoneNumberId,
-        builder.accessToken,
-        phone,
-        "Aapka number hamare system se hata diya gaya hai. Aapko ab koi message nahi milega. Dhanyavaad."
-      ).catch((err) =>
-        logger.warn({ err }, "Failed to send opt‑out confirmation")
-      );
-      return;
-    }
-
-    let conversation = lead.conversations[0];
-    if (!conversation) {
-      logger.error({ phone }, "❌ No conversation found");
-      return;
-    }
-
-    if (conversation.state === ConversationState.COMPLETED) {
-      logger.info(
-        { phone },
-        "🔄 Conversation reset — new conversation starting"
-      );
-      conversation = await createNewConversation(lead.id);
-      await updateLeadStatus(lead.id, LeadStatus.NEW);
-    }
-
+    // 8. Process the message
     await processIncomingMessage(
       phone,
       userText,

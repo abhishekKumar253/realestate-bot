@@ -16,7 +16,7 @@ const globalForPrisma = globalThis as unknown as {
 
 if (!globalForPrisma.prisma) {
   const adapter = new PrismaNeon({
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: process.env.DATABASE_URL,
   });
 
   globalForPrisma.prisma = new PrismaClient({
