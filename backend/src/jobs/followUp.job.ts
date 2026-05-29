@@ -1,24 +1,24 @@
 import cron from "node-cron";
 import { prisma } from "../db/prisma";
-import { sendTemplateMessage } from "../services/whatsapp.service";
+import { sendTextMessage } from "../services/whatsapp.service";
 import { decryptToken } from "../utils/crypto";
 import logger from "../utils/logger";
 import { ConversationState, LeadStatus } from "@prisma/client";
 
-// Daily at 10 PM Indian time (adjust as needed)
+// Har 2 ghante run (20‑hour cutoff, 7‑day cooldown)
 export const startFollowUpJob = () => {
-  cron.schedule("0 22 * * *", async () => {
+  cron.schedule("0 */2 * * *", async () => {
     logger.info("🔄 Follow‑up job started");
 
     try {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const twentyHoursAgo = new Date(Date.now() - 20 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       // Eligible leads:
       const staleLeads = await prisma.lead.findMany({
         where: {
           status: { in: [LeadStatus.NEW, LeadStatus.QUALIFIED] },
-          updatedAt: { lt: oneDayAgo },
+          updatedAt: { lt: twentyHoursAgo }, // 20 hrs inactive
           conversations: {
             some: {
               state: { not: ConversationState.COMPLETED },
@@ -47,15 +47,14 @@ export const startFollowUpJob = () => {
 
         try {
           const accessToken = decryptToken(lead.builder.encryptedToken);
-          const name = lead.name ? `${lead.name} जी` : "जी";
+          const name = lead.name ? ` ${lead.name} जी` : "";
+          const message = `Namaste${name}! 🏠 Kya aap abhi bhi property dhundh rahe hain? Hamari team aapki madad ke liye taiyaar hai. Bas batayein!`;
 
-          const sent = await sendTemplateMessage(
+          const sent = await sendTextMessage(
             lead.builder.phoneNumberId,
             accessToken,
             lead.phone,
-            "lead_follow_up_reminder", 
-            "hi",
-            [name]
+            message
           );
 
           if (sent) {
@@ -77,5 +76,5 @@ export const startFollowUpJob = () => {
     }
   });
 
-  logger.info("✅ Follow‑up cron scheduled — daily at 10 PM");
+  logger.info("✅ Follow‑up cron scheduled — every 2 hours");
 };
