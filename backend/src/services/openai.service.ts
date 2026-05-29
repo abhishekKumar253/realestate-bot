@@ -54,60 +54,27 @@ Extract the following fields IF AND ONLY IF they are explicitly mentioned in the
 - visitNote: any condition about site visit
 
 - amenities: comma separated list of required amenities
-  Examples:
-  - "lift"
-  - "covered parking"
-  - "gated society"
-  - "gym"
-  - "garden"
   Mappings:
   - "lift", "elevator" → lift
   - "parking", "covered parking" → covered parking
   - "gated society", "security" → gated society
 
 - possession: READY_TO_MOVE or UNDER_CONSTRUCTION
-  Mappings:
-  - "ready to move", "taiyar flat", "bani banayi", "complete" → READY_TO_MOVE
-  - "under construction", "ban raha hai", "abhi bana rahe" → UNDER_CONSTRUCTION
-
 - loanStatus: PRE_APPROVED, APPLIED, NONE
-  Mappings:
-  - "loan pre-approved", "loan sanction ho gaya", "pre approved" → PRE_APPROVED
-  - "loan apply kiya hai", "apply kiya hai", "loan chal raha hai" → APPLIED
-  - "no loan", "cash", "khud ka paisa", "self funded" → NONE
-
-- siteVisitDay: preferred day for site visit (e.g., "Sunday", "Saturday")
-- siteVisitTime: preferred time (e.g., "11 AM", "4 PM")
-- otherPropertyTypes: Comma-separated list of additional property types the user is interested in (APARTMENT, VILLA, PLOT, COMMERCIAL)
+- siteVisitDay: preferred day for site visit
+- siteVisitTime: preferred time
+- otherPropertyTypes: additional property types (APARTMENT, VILLA, PLOT, COMMERCIAL)
 - minBudget: Minimum budget in INR (integer)
 - maxBudget: Maximum budget in INR (integer)
 
 CRITICAL RULES:
 - NEVER GUESS, INFER, OR ASSUME ANY VALUE.
 - ONLY extract what is EXPLICITLY written in the CURRENT message.
-- The conversation history is provided ONLY for context understanding.
-- NEVER carry forward values from previous messages unless the user explicitly repeats them.
-- If the current message does NOT mention a field, DO NOT extract that field — even if it was mentioned in previous messages.
-- If a field is not mentioned, OMIT it completely from the JSON response.
 - For vague urgency words ("jaldi", "turant", "ASAP", "fast"), do NOT set timeline.
 
 SMART wantsVisit DETECTION (IMPORTANT):
 - If the LAST ASSISTANT message contained a site-visit question AND the user's CURRENT message is a short positive reply (max 5 words, containing any of: haan, ha, ji, yes, ready, taiyaar, bilkul, ok, okay, theek hai), then set wantsVisit: true.
 - Even if the text is malformed like "hai ham taiyaar hai", treat it as true as long as it contains "taiyaar" or "ready".
-
-NON-INFORMATIVE INPUT:
-- If the user's message is only emojis, stickers, random characters, or meaningless text, return an empty JSON object: {}
-
-Mappings (existing):
-- "ghar", "flat", "makan" → APARTMENT
-- "zameen", "plot" → PLOT
-- "shop", "commercial shop", "office" → COMMERCIAL
-- "invest karna hai", "investment ke liye", "invest", "investment" → INVESTMENT
-- "rehna hai", "khud ke liye", "end use", "apna ghar", "apne parents ke liye", "family ke liye", "parivaar ke liye", "parents ke liye" → END_USE
-- "15 din", "1 mahina", "30 din" → ONE_MONTH
-- "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS
-- "6 mahine", "chhah mahine" → SIX_MONTHS
-- "baad mein", "koi jaldi nahi", "flexible" → MORE_THAN_SIX_MONTHS
 
 Return ONLY valid JSON, no explanation, no markdown.
 `;
@@ -152,7 +119,7 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply ==========
+// ========== Generate Bot Reply (FINAL – ANTI‑PARROTING, POSSESSION FORCED) ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -169,7 +136,6 @@ export const generateReply = async (
       [...conversationHistory].reverse().find((msg) => msg.role === "user")
         ?.content ?? "";
 
-
     // ========== Language Override ==========
     let languageOverride = "";
     if (userLanguage === "hindi") {
@@ -183,7 +149,7 @@ export const generateReply = async (
         "CRITICAL LANGUAGE RULE: Respond in Hinglish using Latin script. Do not use Devanagari script.";
     }
 
-    // ========== Base Prompt ==========
+    // ========== Base Prompt (with anti‑parroting and possession fix) ==========
     const basePrompt = `
 ${languageOverride}
 
@@ -222,14 +188,21 @@ STRICT BEHAVIOR RULES:
    - If user already mentioned property type, do not ask property type again.
    - If user already mentioned location, acknowledge it naturally and move to next missing field.
 
-2. NO REPEATS:
-   - Never ask a field again if it is already present in Current lead data collected.
-   - If multiple details are already given in one user message, acknowledge briefly and ask only the next missing field.
-   - Do not ask "anything else?" if the user already gave a lot of useful info.
+2. NO PARROTING (CRITICAL):
+   - **NEVER start your reply by repeating what the user just said.**
+     - ❌ "Aapko gym chahiye, samajh gaya!"
+     - ❌ "Saturday karna hai, samajh gaya!"
+     - ✅ "Gym — badhiya choice. Kaunsi aur amenities chahiye?"
+     - ✅ "Saturday morning — perfect. Summary yeh rahi..."
+   - **Never say "aapne bola", "aapne bataya", "aapka budget X hai".**
+   - Simply use a short acknowledgment ("Samjha!", "Achha!", "Okay!") and immediately ask the NEXT missing field.
+   - Do NOT repeat the user's requirement back to them unless giving the FINAL summary.
 
-3. QUESTION PRIORITY:
-   Ask only ONE next relevant question at a time in this order:
-   propertyType → bhk → purpose → location → budget → timeline → amenities → possession → loanStatus → site visit timing
+3. QUESTION PRIORITY (FOLLOW STRICTLY):
+   Ask only ONE question at a time in this order:
+   propertyType → bhk → purpose → location → budget → timeline → amenities → **possession** → loanStatus → site visit timing
+   - **After amenities are collected, you MUST ask possession next: "Ready‑to‑move flat chahiye ya under‑construction bhi chalega?"**
+   - Do NOT ask loan status before possession.
 
 4. TIMELINE HANDLING:
    - Never assume "jaldi", "turant", "ASAP" means 1 month.
@@ -254,9 +227,12 @@ STRICT BEHAVIOR RULES:
    - If the user says rude things like "shut up", "bakwas", "stupid", respond calmly in Hinglish and redirect politely:
      "Maaf kijiye agar koi galti ho gayi. Main aapki property related madad ke liye yahan hoon."
 
-8. CLOSING:
-   - Once all important details are collected, give a short warm summary and handoff.
-   - Do not make the closing long or overly salesy.
+8. CLOSING (FINAL, NO OPEN END):
+   - **When ALL required fields are collected AND site visit day/time is known, provide a short warm summary and CLOSE the conversation.**
+   - **Do NOT ask "Aur koi madad?" or "Kuch aur puchhna hai?"**
+   - End with a handoff like:
+     "Shukriya [Name] ji! Saari details mil gayi. Hamari team jald hi aapse contact karegi. Aapka din shubh ho! 🙏"
+   - If the name is missing, use "ji".
 
 9. DOMAIN RULE:
    - Only discuss real estate.
