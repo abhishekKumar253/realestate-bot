@@ -85,18 +85,12 @@ const buildUpdateData = (
 ): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
 
-  // All common fields where existence (truthy) is enough
+  // ─── Simple truthy fields (no enum) ────────────────────────────
   const simpleFields: (keyof ExtractedLeadData)[] = [
     "name",
-    "propertyType",
     "budget",
     "location",
     "bhk",
-    "purpose",
-    "timeline",
-    "amenities",
-    "possession",
-    "loanStatus",
     "siteVisitDay",
     "siteVisitTime",
     "visitNote",
@@ -105,12 +99,50 @@ const buildUpdateData = (
 
   for (const field of simpleFields) {
     const value = extracted[field];
-    if (value) {
-      data[field] = value;
-    }
+    if (value) data[field] = value;
   }
 
-  // minBudget / maxBudget need different check (0 is valid)
+  // ─── Enum validations ──────────────────────────────────────────
+  const validPropertyTypes = new Set([
+    "APARTMENT",
+    "VILLA",
+    "PLOT",
+    "COMMERCIAL",
+  ]);
+  if (
+    extracted.propertyType &&
+    validPropertyTypes.has(extracted.propertyType)
+  ) {
+    data.propertyType = extracted.propertyType;
+  }
+
+  const validPurposes = new Set(["INVESTMENT", "END_USE"]);
+  if (extracted.purpose && validPurposes.has(extracted.purpose)) {
+    data.purpose = extracted.purpose;
+  }
+
+  // possession and loanStatus are not Prisma enums, but they are expected strings
+  const validPossession = new Set(["READY_TO_MOVE", "UNDER_CONSTRUCTION"]);
+  if (extracted.possession && validPossession.has(extracted.possession)) {
+    data.possession = extracted.possession;
+  }
+
+  const validLoanStatus = new Set(["PRE_APPROVED", "APPLIED", "NONE"]);
+  if (extracted.loanStatus && validLoanStatus.has(extracted.loanStatus)) {
+    data.loanStatus = extracted.loanStatus;
+  }
+
+  const validTimelines = new Set([
+    "ONE_MONTH",
+    "THREE_MONTHS",
+    "SIX_MONTHS",
+    "MORE_THAN_SIX_MONTHS",
+  ]);
+  if (extracted.timeline && validTimelines.has(extracted.timeline)) {
+    data.timeline = extracted.timeline;
+  }
+
+  // ─── Numeric fields ────────────────────────────────────────────
   if (extracted.minBudget !== undefined) data.minBudget = extracted.minBudget;
   if (extracted.maxBudget !== undefined) data.maxBudget = extracted.maxBudget;
 

@@ -45,10 +45,7 @@ Extract the following fields IF AND ONLY IF they are explicitly mentioned in the
   - "investment", "invest", "rental income", "rental potential", "ROI", "return", "for rent" → INVESTMENT
   - "family ke liye", "parents ke liye", "khud rehne ke liye", "end use", "apna ghar" → END_USE
 
-- timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS
-  ONLY extract if a SPECIFIC timeframe is given (e.g., "15 din", "1 mahina", "2-3 months", "6 mahine", "1 saal").
-  Do NOT infer from vague words like "jaldi", "fast", "ASAP", "turant".
-  If only vague urgency is mentioned, OMIT timeline entirely.
+- timeline: ONLY use these EXACT four values: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS. Never create values like TWO_MONTHS, FOUR_MONTHS, etc. If user says "2-3 months", "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS. If user says "1 month", "1 mahina", "30 din" → ONE_MONTH. If user says "6 months", "chhah mahine" → SIX_MONTHS. If user says "more than 6 months", "baad mein", "flexible" → MORE_THAN_SIX_MONTHS.
 
 - wantsVisit: true if user wants to schedule a site visit
 - visitNote: any condition about site visit
