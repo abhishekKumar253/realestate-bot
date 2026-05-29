@@ -38,8 +38,6 @@ import type {
   IncomingMessage,
 } from "../types/whatsapp.types";
 import { prisma } from "../db/prisma";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 import {
   REQUIRED_LEAD_FIELDS,
   SITE_VISIT_AFFIRMATIVE_PATTERNS,
@@ -96,9 +94,8 @@ const buildUpdateData = (
   return data;
 };
 
-// ✅ Using constants file
 const getMissingFields = (lead: Record<string, unknown>): string[] => {
-  return REQUIRED_LEAD_FIELDS.filter((f) => !lead[f]);
+  return [...REQUIRED_LEAD_FIELDS].filter((f) => !lead[f]);
 };
 
 const fieldToState: Record<string, ConversationState> = {
@@ -145,6 +142,7 @@ async function processIncomingMessage(
   >,
   builder: BuilderWithToken
 ): Promise<void> {
+  // 1. Conversation history
   const history = await getConversationHistory(conversation.id);
   const historyForOpenAI = history.map((msg) => ({
     role:
@@ -154,9 +152,10 @@ async function processIncomingMessage(
     content: msg.content,
   }));
 
+  // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // ✅ Using constants for affirmative patterns
+  // 3. Site visit intent — only in ASK_SITE_VISIT state
   if (conversation.state === ConversationState.ASK_SITE_VISIT) {
     const lowerMsg = userText.toLowerCase().trim();
     extracted.wantsVisit = SITE_VISIT_AFFIRMATIVE_PATTERNS.some((p) =>
@@ -166,6 +165,7 @@ async function processIncomingMessage(
     extracted.wantsVisit = false;
   }
 
+  // 4. Save user message
   await saveMessage(
     conversation.id,
     MessageRole.USER,
@@ -173,12 +173,14 @@ async function processIncomingMessage(
     whatsappMessageId
   );
 
+  // 5. Update lead with extracted data
   const updateData = buildUpdateData(extracted);
   const freshLead =
     Object.keys(updateData).length > 0
       ? await updateLead(lead.id, updateData)
       : lead;
 
+  // 6. Compute missing fields from fresh data
   const mergedLead = {
     propertyType: freshLead.propertyType,
     budget: freshLead.budget,
@@ -190,6 +192,8 @@ async function processIncomingMessage(
   };
 
   const missingFields = getMissingFields(mergedLead);
+
+  // 7. Compute new state
   const newState = computeNewState(
     conversation.state,
     missingFields,
@@ -198,6 +202,7 @@ async function processIncomingMessage(
 
   const finalState = newState;
 
+  // 8. Status update + broker notification (only on completion)
   if (
     finalState === ConversationState.COMPLETED &&
     missingFields.length === 0
@@ -229,8 +234,10 @@ async function processIncomingMessage(
     }
   }
 
+  // 9. Update conversation state
   await updateConversationState(conversation.id, finalState);
 
+  // 10. Typing indicator
   await sendTypingIndicator(
     builder.phoneNumberId,
     builder.accessToken,
@@ -238,6 +245,7 @@ async function processIncomingMessage(
     whatsappMessageId
   ).catch((err) => logger.warn({ err }, "⚠️ Typing indicator failed"));
 
+  // 11. Generate reply
   const userLanguage = detectLanguage(userText);
 
   const reply = await generateReply(
@@ -258,6 +266,7 @@ async function processIncomingMessage(
     userLanguage
   );
 
+  // 12. Send reply + save bot message
   const isSent = await sendTextMessage(
     builder.phoneNumberId,
     builder.accessToken,
@@ -274,7 +283,7 @@ async function processIncomingMessage(
   );
 }
 
-// ========== Refactored handleIncoming with reduced cognitive complexity ==========
+// ========== Handler Helpers ==========
 
 async function fetchActiveBuilder(
   phoneNumberId: string
@@ -318,7 +327,6 @@ async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
   return false;
 }
 
-// ✅ Using constants for opt‑out phrases
 async function handleOptOut(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   userText: string,
@@ -340,7 +348,7 @@ async function handleOptOut(
       phone,
       "Aapka number hamare system se hata diya gaya hai. Aapko ab koi message nahi milega. Dhanyavaad."
     ).catch((err) =>
-      logger.warn({ err }, "Failed to send opt‑out confirmation")
+      logger.warn({ err }, "Failed to send opt-out confirmation")
     );
     return true;
   }
@@ -366,7 +374,7 @@ async function getActiveConversation(
   return conversation;
 }
 
-// ========== POST — Incoming Messages (main handler) ==========
+// ========== POST — Incoming Messages ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -377,7 +385,6 @@ export const handleIncoming = async (
     const body = req.body as WhatsAppWebhookPayload;
     if (body.object !== "whatsapp_business_account") return;
 
-    // 1. Identify builder
     const phoneNumberId = extractPhoneNumberId(body);
     if (!phoneNumberId) {
       logger.warn("No phone_number_id in webhook");
@@ -387,20 +394,16 @@ export const handleIncoming = async (
     const builder = await fetchActiveBuilder(phoneNumberId);
     if (!builder) return;
 
-    // 2. Extract message & handle non‑text
     const message = extractMessage(body);
     if (!message) return;
     if (await sendFallbackIfNeeded(message, builder)) return;
 
-    // 3. Normalize phone & text
     const phone = normalizePhone(message.from);
     const userText = getUserText(message);
     if (!userText.trim()) return;
 
-    // 4. Duplicate check
     if (await isDuplicate(message.id)) return;
 
-    // 5. Use WhatsApp profile name directly (no filtering)
     const contactName = extractContactName(body) ?? undefined;
     logger.info(
       { phone, builderId: builder.id, message: userText },
@@ -415,13 +418,10 @@ export const handleIncoming = async (
 
     const lead = await getOrCreateLead(phone, builder.id, contactName);
 
-    // 6. Opt‑out handling
     if (await handleOptOut(lead, userText, builder, phone)) return;
 
-    // 7. Conversation reset (if needed)
     const conversation = await getActiveConversation(lead, phone);
 
-    // 8. Process the message
     await processIncomingMessage(
       phone,
       userText,

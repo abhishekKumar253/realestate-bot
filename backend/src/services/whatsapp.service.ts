@@ -148,7 +148,6 @@ export const markAsRead = async (
 
     logger.info({ messageId }, "✅ Message marked as read");
   } catch (error: unknown) {
-    // Non-critical — log as warn only
     const metaError =
       error instanceof Error
         ? (error as any).response?.data ?? error.message

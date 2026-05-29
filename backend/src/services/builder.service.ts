@@ -26,6 +26,37 @@ export interface BuilderWithToken {
   isActive: boolean;
 }
 
+// ─── In-Memory Builder Cache ──────────────────────────────────────────────────
+const builderCache = new Map<
+  string,
+  { data: BuilderWithToken; expiresAt: number }
+>();
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCached = (phoneNumberId: string): BuilderWithToken | null => {
+  const cached = builderCache.get(phoneNumberId);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
+    builderCache.delete(phoneNumberId);
+    return null;
+  }
+  return cached.data;
+};
+
+const setCache = (phoneNumberId: string, data: BuilderWithToken): void => {
+  builderCache.set(phoneNumberId, {
+    data,
+    expiresAt: Date.now() + CACHE_TTL,
+  });
+};
+
+// Cache invalidate karo jab builder update ho
+export const invalidateBuilderCache = (phoneNumberId: string): void => {
+  builderCache.delete(phoneNumberId);
+  logger.info({ phoneNumberId }, "🗑️ Builder cache invalidated");
+};
+
 // ─── createBuilder ────────────────────────────────────────────────────────────
 
 export const createBuilder = async (
@@ -54,9 +85,18 @@ export const createBuilder = async (
 };
 
 // ─── getBuilderByPhoneNumberId ────────────────────────────────────────────────
+// CHANGED: Cache add kiya — har message pe DB hit nahi hoga
+
 export const getBuilderByPhoneNumberId = async (
   phoneNumberId: string
 ): Promise<BuilderWithToken | null> => {
+  // Cache check
+  const cached = getCached(phoneNumberId);
+  if (cached) {
+    logger.debug({ phoneNumberId }, "✅ Builder from cache");
+    return cached;
+  }
+
   const builder = await prisma.builder.findUnique({
     where: { phoneNumberId },
   });
@@ -65,17 +105,20 @@ export const getBuilderByPhoneNumberId = async (
 
   try {
     const accessToken = decryptToken(builder.encryptedToken);
-    return {
-      ...builder,
-      accessToken,
-    };
+    const result: BuilderWithToken = { ...builder, accessToken };
+
+    // Cache mein store karo
+    setCache(phoneNumberId, result);
+    logger.debug({ phoneNumberId }, "✅ Builder cached");
+
+    return result;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     logger.error(
       { builderId: builder.id, error: message },
       "Failed to decrypt token — check TOKEN_ENCRYPTION_KEY"
     );
-    return null; // treat as not found — bot won't reply with wrong token
+    return null;
   }
 };
 
@@ -92,10 +135,7 @@ export const getBuilderById = async (
 
   try {
     const accessToken = decryptToken(builder.encryptedToken);
-    return {
-      ...builder,
-      accessToken,
-    };
+    return { ...builder, accessToken };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     logger.error({ builderId: id, error: message }, "Failed to decrypt token");
@@ -109,10 +149,13 @@ export const setBuilderActive = async (
   id: string,
   isActive: boolean
 ): Promise<void> => {
-  await prisma.builder.update({
+  const builder = await prisma.builder.update({
     where: { id },
     data: { isActive },
   });
+
+  // Cache invalidate karo taaki next request fresh data le
+  invalidateBuilderCache(builder.phoneNumberId);
 
   logger.info({ builderId: id, isActive }, "Builder status updated");
 };

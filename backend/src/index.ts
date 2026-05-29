@@ -7,6 +7,7 @@ import { env } from "./config/index";
 import logger from "./utils/logger";
 import { prisma } from "./db/prisma";
 import webhookRouter from "./routes/webhook.route";
+import { startFollowUpJob } from "./jobs/followUp.job"; // <-- added
 
 const app = express();
 
@@ -78,6 +79,7 @@ const start = async () => {
 
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT} in ${env.NODE_ENV} mode`);
+      startFollowUpJob();
     });
   } catch (error) {
     logger.error({ error }, "❌ Failed to start server");

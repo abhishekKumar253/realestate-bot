@@ -98,11 +98,12 @@ model Lead {
 }
 
 model Conversation {
-    id        String            @id @default(cuid())
-    leadId    String
-    state     ConversationState @default(GREETING)
-    createdAt DateTime          @default(now())
-    updatedAt DateTime          @updatedAt
+    id                 String            @id @default(cuid())
+    leadId             String
+    state              ConversationState @default(GREETING)
+    lastFollowUpSentAt DateTime?
+    createdAt          DateTime          @default(now())
+    updatedAt          DateTime          @updatedAt
 
     lead     Lead      @relation(fields: [leadId], references: [id])
     messages Message[]
