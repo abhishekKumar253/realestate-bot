@@ -61,6 +61,11 @@ Extract the following fields IF AND ONLY IF they are explicitly mentioned in the
 
 - possession: READY_TO_MOVE or UNDER_CONSTRUCTION
 - loanStatus: PRE_APPROVED, APPLIED, NONE
+  Mappings:
+  - "loan pre-approved", "loan sanction ho gaya", "pre approved" → PRE_APPROVED
+  - "loan apply kiya hai", "apply kiya hai", "loan chal raha hai" → APPLIED
+  - "apply karna hai", "apply karna baaki hai", "loan lena hai", "loan par lena hai", "loan required" → APPLIED
+  - "no loan", "cash", "khud ka paisa", "self funded" → NONE
 - siteVisitDay: preferred day for site visit
 - siteVisitTime: preferred time
 - otherPropertyTypes: additional property types (APARTMENT, VILLA, PLOT, COMMERCIAL)
