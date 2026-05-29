@@ -119,7 +119,7 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply (FINAL – WITH HALLUCINATION FIX) ==========
+// ========== Generate Bot Reply (CHATGPT 3‑POINT FIX ONLY) ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -149,7 +149,7 @@ export const generateReply = async (
         "CRITICAL LANGUAGE RULE: Respond in Hinglish using Latin script. Do not use Devanagari script.";
     }
 
-    // ========== Base Prompt (all recent fixes integrated) ==========
+    // ========== Base Prompt (only ChatGPT‑requested fixes) ==========
     const basePrompt = `
 ${languageOverride}
 
