@@ -92,13 +92,22 @@ export const getBuilderByPhoneNumberId = async (
 ): Promise<BuilderWithToken | null> => {
   // Cache check
   const cached = getCached(phoneNumberId);
-  if (cached) {
-    logger.debug({ phoneNumberId }, "✅ Builder from cache");
-    return cached;
-  }
+  if (cached) return cached;
 
   const builder = await prisma.builder.findUnique({
     where: { phoneNumberId },
+    select: {
+      id: true,
+      businessName: true,
+      phoneNumberId: true,
+      encryptedToken: true,
+      notificationPhone: true,
+      systemPrompt: true,
+      isActive: true,
+      verifyToken: true,
+      wabaId: true,
+      phoneNumber: true,
+    },
   });
 
   if (!builder) return null;
@@ -106,17 +115,12 @@ export const getBuilderByPhoneNumberId = async (
   try {
     const accessToken = decryptToken(builder.encryptedToken);
     const result: BuilderWithToken = { ...builder, accessToken };
-
-    // Cache mein store karo
     setCache(phoneNumberId, result);
-    logger.debug({ phoneNumberId }, "✅ Builder cached");
-
     return result;
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch (err) {
     logger.error(
-      { builderId: builder.id, error: message },
-      "Failed to decrypt token — check TOKEN_ENCRYPTION_KEY"
+      { builderId: builder.id, error: err },
+      "Failed to decrypt token"
     );
     return null;
   }

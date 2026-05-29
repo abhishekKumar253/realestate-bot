@@ -337,6 +337,14 @@ async function processIncomingMessage(
   // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
+  // ✅ Turant typing indicator — user ko lagega bot reply kar raha hai
+  sendTypingIndicator(
+    builder.phoneNumberId,
+    builder.accessToken,
+    phone,
+    whatsappMessageId
+  ).catch(() => {});
+
   // 3. Resolve site visit intent (helper)
   const lastAssistantMessage = getLastAssistantMessage(history);
   resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
@@ -395,13 +403,7 @@ async function processIncomingMessage(
   // 9. Update conversation state
   await updateConversationState(conversation.id, finalState);
 
-  // 10. Typing indicator
-  await sendTypingIndicator(
-    builder.phoneNumberId,
-    builder.accessToken,
-    phone,
-    whatsappMessageId
-  ).catch((err) => logger.warn({ err }, "⚠️ Typing indicator failed"));
+  // 10. Typing indicator already sent earlier – removed duplicate
 
   // 11. Generate reply
   const userLanguage = detectLanguage(userText);
