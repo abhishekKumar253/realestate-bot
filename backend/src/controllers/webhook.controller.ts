@@ -91,6 +91,16 @@ const buildUpdateData = (
   if (extracted.bhk) data.bhk = extracted.bhk;
   if (extracted.purpose) data.purpose = extracted.purpose;
   if (extracted.timeline) data.timeline = extracted.timeline;
+  if (extracted.amenities) data.amenities = extracted.amenities;
+  if (extracted.possession) data.possession = extracted.possession;
+  if (extracted.loanStatus) data.loanStatus = extracted.loanStatus;
+  if (extracted.siteVisitDay) data.siteVisitDay = extracted.siteVisitDay;
+  if (extracted.siteVisitTime) data.siteVisitTime = extracted.siteVisitTime;
+  // New fields
+  if (extracted.otherPropertyTypes)
+    data.otherPropertyTypes = extracted.otherPropertyTypes;
+  if (extracted.minBudget !== undefined) data.minBudget = extracted.minBudget;
+  if (extracted.maxBudget !== undefined) data.maxBudget = extracted.maxBudget;
   return data;
 };
 
@@ -106,6 +116,10 @@ const fieldToState: Record<string, ConversationState> = {
   purpose: ConversationState.ASK_PURPOSE,
   timeline: ConversationState.ASK_TIMELINE,
   name: ConversationState.ASK_NAME,
+  amenities: ConversationState.ASK_AMENITIES,
+  possession: ConversationState.ASK_POSSESSION,
+  loanStatus: ConversationState.ASK_LOAN_STATUS,
+  siteVisitDay: ConversationState.ASK_SITE_VISIT_DAY,
 };
 
 const computeNewState = (
@@ -189,6 +203,14 @@ async function processIncomingMessage(
     purpose: freshLead.purpose,
     timeline: freshLead.timeline,
     name: freshLead.name,
+    amenities: freshLead.amenities,
+    possession: freshLead.possession,
+    loanStatus: freshLead.loanStatus,
+    siteVisitDay: freshLead.siteVisitDay,
+    siteVisitTime: freshLead.siteVisitTime,
+    otherPropertyTypes: freshLead.otherPropertyTypes,
+    minBudget: freshLead.minBudget,
+    maxBudget: freshLead.maxBudget,
   };
 
   const missingFields = getMissingFields(mergedLead);
@@ -223,6 +245,14 @@ async function processIncomingMessage(
           bhk: mergedLead.bhk,
           purpose: mergedLead.purpose,
           timeline: mergedLead.timeline,
+          amenities: mergedLead.amenities,
+          possession: mergedLead.possession,
+          loanStatus: mergedLead.loanStatus,
+          siteVisitDay: mergedLead.siteVisitDay,
+          siteVisitTime: mergedLead.siteVisitTime,
+          otherPropertyTypes: mergedLead.otherPropertyTypes,
+          minBudget: mergedLead.minBudget,
+          maxBudget: mergedLead.maxBudget,
         },
         builder.businessName
       ).catch((err) => logger.error({ err }, "❌ Broker notification failed"));
@@ -260,6 +290,14 @@ async function processIncomingMessage(
       timeline: mergedLead.timeline ?? undefined,
       wantsVisit: extracted.wantsVisit,
       visitNote: extracted.visitNote,
+      amenities: mergedLead.amenities ?? undefined,
+      possession: mergedLead.possession ?? undefined,
+      loanStatus: mergedLead.loanStatus ?? undefined,
+      siteVisitDay: mergedLead.siteVisitDay ?? undefined,
+      siteVisitTime: mergedLead.siteVisitTime ?? undefined,
+      otherPropertyTypes: mergedLead.otherPropertyTypes ?? undefined,
+      minBudget: mergedLead.minBudget ?? undefined,
+      maxBudget: mergedLead.maxBudget ?? undefined,
     },
     [...historyForOpenAI, { role: "user" as const, content: userText }],
     builder.systemPrompt,

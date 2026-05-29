@@ -68,6 +68,24 @@ export const detectLanguage = (
     return "hinglish";
   }
 
+  // 3. Frustration / Rude words → force Hinglish (so bot replies in Hinglish, not English)
+  const rudeWords = new Set([
+    "shut up",
+    "stupid",
+    "bakwas",
+    "bakwaas",
+    "chup",
+    "hat",
+    "nalayak",
+    "idiot",
+    "dumb",
+    "mad",
+    "fuck",
+    "what the",
+    "what is this",
+  ]);
+  if (rudeWords.has(lowerText)) return "hinglish";
+
   // If any Hinglish word found → Hinglish
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
   if (hinglishCount > 0) return "hinglish";

@@ -33,6 +33,10 @@ enum ConversationState {
     ASK_TIMELINE
     ASK_NAME
     ASK_SITE_VISIT
+    ASK_AMENITIES
+    ASK_POSSESSION
+    ASK_LOAN_STATUS
+    ASK_SITE_VISIT_DAY
     COMPLETED
 }
 
@@ -75,18 +79,26 @@ model Builder {
 }
 
 model Lead {
-    id           String        @id @default(cuid())
-    phone        String
-    name         String?
-    propertyType PropertyType?
-    budget       String?
-    location     String?
-    bhk          String?
-    purpose      Purpose?
-    timeline     Timeline?
-    status       LeadStatus    @default(NEW)
-    createdAt    DateTime      @default(now())
-    updatedAt    DateTime      @updatedAt
+    id                 String        @id @default(cuid())
+    phone              String
+    name               String?
+    propertyType       PropertyType?
+    budget             String?
+    location           String?
+    bhk                String?
+    purpose            Purpose?
+    timeline           Timeline?
+    amenities          String?
+    possession         String?
+    loanStatus         String?
+    siteVisitDay       String?
+    siteVisitTime      String?
+    otherPropertyTypes String?
+    minBudget          Int?
+    maxBudget          Int?
+    status             LeadStatus    @default(NEW)
+    createdAt          DateTime      @default(now())
+    updatedAt          DateTime      @updatedAt
 
     builderId String
     builder   Builder @relation(fields: [builderId], references: [id])

@@ -5,34 +5,54 @@ import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
 const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
-// ========== Extracted Lead Data Type ==========
+// ========== Extracted Lead Data Type (FINAL – all fields) ==========
 export interface ExtractedLeadData {
   name?: string;
   propertyType?: PropertyType;
-  budget?: string;
+  budget?: string; // kept for backward compatibility (original string)
   location?: string;
   bhk?: string;
   purpose?: Purpose;
   timeline?: Timeline;
   wantsVisit?: boolean;
   visitNote?: string;
+  amenities?: string;
+  possession?: string;
+  loanStatus?: string;
+  siteVisitDay?: string;
+  siteVisitTime?: string;
+  otherPropertyTypes?: string; // e.g. "PLOT, COMMERCIAL"
+  minBudget?: number; // amount in INR (e.g. 4000000)
+  maxBudget?: number; // amount in INR (e.g. 5000000)
 }
 
-// ========== Enhanced Extraction Prompt (with wantsVisit fix) ==========
+// ========== Enhanced Extraction Prompt (FIXED TIMELINE ASSUMPTION) ==========
 const EXTRACTION_SYSTEM_PROMPT = `
 You are a data extraction assistant for a real estate business in Ranchi, Jharkhand, India.
 Your ONLY job is to extract structured data from the CURRENT user message.
 
 Extract the following fields IF AND ONLY IF they are explicitly mentioned in the CURRENT message:
-- name: User's real full name (e.g., "Rahul", "Priya Sharma"). Do NOT extract common greetings ("hi", "hello", "hii", "hey", "namaste", "ram ram") as a name. If only a greeting is present, omit the name field entirely.
+- name: User's real full name. Do NOT extract common greetings as a name. If only a greeting, omit.
 - propertyType: One of APARTMENT, VILLA, PLOT, COMMERCIAL
 - budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L"). Convert "50 lakh" to "50L".
-- location: Area/locality in Ranchi they prefer (e.g., Lalpur, Kokar, Kanke, etc.)
+- location: Area/locality in Ranchi they prefer.
 - bhk: BHK preference (e.g., "1BHK", "2BHK", "3BHK"). "2 bedroom" = "2BHK"
 - purpose: INVESTMENT or END_USE
-- timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS
+- timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS. ONLY extract if a SPECIFIC timeframe is given (e.g., "15 din", "1 mahina", "2-3 months", "6 mahine", "1 saal"). Do NOT infer from vague words like "jaldi", "fast", "ASAP", "turant". If only vague urgency is mentioned, OMIT the timeline field entirely.
 - wantsVisit: true if user wants to schedule a site visit
 - visitNote: any condition about site visit
+- amenities: comma separated list of required amenities (e.g., "lift, covered parking, gated society").
+  Mappings: "lift", "elevator" → lift; "parking", "covered parking" → covered parking; "gated society", "security" → gated society.
+- possession: READY_TO_MOVE or UNDER_CONSTRUCTION.
+  Mappings: "ready to move", "taiyar flat", "bani banayi", "complete" → READY_TO_MOVE; "under construction", "ban raha hai", "abhi bana rahe" → UNDER_CONSTRUCTION.
+- loanStatus: PRE_APPROVED, APPLIED, NONE.
+  Mappings: "loan pre-approved", "loan sanction ho gaya", "pre approved" → PRE_APPROVED; "loan apply kiya hai", "apply kiya hai", "loan chal raha hai" → APPLIED; "no loan", "cash", "khud ka paisa", "self funded" → NONE.
+- siteVisitDay: preferred day for site visit (e.g., "Sunday", "Saturday"). Extract if user says "Sunday aaunga", "Saturday morning".
+- siteVisitTime: preferred time (e.g., "11 AM", "4 PM"). Extract if mentioned together.
+
+- otherPropertyTypes: Comma-separated list of ADDITIONAL property types the user is interested in (beyond primary propertyType). Use enum values: APARTMENT, VILLA, PLOT, COMMERCIAL. Extract from phrases like "flat aur plot dono dekhna hai" → "PLOT", "plot bhi dekh sakta hoon" → "PLOT". If no other type, omit.
+- minBudget: Minimum budget in Indian Rupees (integer). Extract from ranges like "40-50 lakh" → 4000000, "50 lakh" → 5000000. Convert lakhs/crores correctly: 1 lakh = 100000, 1 crore = 10000000.
+- maxBudget: Maximum budget in Indian Rupees (integer). "40-50 lakh" → 5000000. If only single value given, set both min and max to the same.
 
 CRITICAL RULES:
 - NEVER GUESS, INFER, OR ASSUME ANY VALUE.
@@ -41,18 +61,19 @@ CRITICAL RULES:
 - NEVER carry forward values from previous messages unless the user explicitly repeats them.
 - If the current message does NOT mention a field, DO NOT extract that field — even if it was mentioned in previous messages.
 - If a field is not mentioned, OMIT it completely from the JSON response.
+- For vague urgency words ("jaldi", "turant", "ASAP", "fast"), do NOT set timeline.
 
 SMART wantsVisit DETECTION (IMPORTANT):
-- If the LAST ASSISTANT message contained a site‑visit question (e.g., "site visit ke liye taiyaar hain?", "visit karna chahenge?", "taiyaar hain?") AND the user's CURRENT message is a short positive reply (max 5 words, containing any of: haan, ha, ji, yes, ready, taiyaar, bilkul, ok, okay, theek hai), then set wantsVisit: true regardless of other content.
+- If the LAST ASSISTANT message contained a site‑visit question AND the user's CURRENT message is a short positive reply (max 5 words, containing any of: haan, ha, ji, yes, ready, taiyaar, bilkul, ok, okay, theek hai), then set wantsVisit: true regardless of other content.
 - Even if the text is malformed like "hai ham taiyaar hai", treat it as true as long as it contains "taiyaar" or "ready".
 
-Mappings:
+Mappings (existing):
 - "ghar", "flat", "makan" → APARTMENT
 - "zameen", "plot" → PLOT
 - "shop", "commercial shop", "office" → COMMERCIAL
 - "invest karna hai", "investment ke liye", "invest", "investment" → INVESTMENT
 - "rehna hai", "khud ke liye", "end use", "apna ghar", "apne parents ke liye", "family ke liye", "parivaar ke liye", "parents ke liye" → END_USE
-- "15 din", "jaldi", "turant", "1 mahina" → ONE_MONTH
+- "15 din", "1 mahina", "30 din" → ONE_MONTH
 - "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS
 - "6 mahine", "chhah mahine" → SIX_MONTHS
 - "baad mein", "koi jaldi nahi", "flexible" → MORE_THAN_SIX_MONTHS
@@ -78,7 +99,7 @@ export const extractLeadData = async (
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      max_tokens: 300,
+      max_tokens: 400, // increased for new fields
       temperature: 0,
       response_format: { type: "json_object" },
     });
@@ -146,11 +167,9 @@ STRICT BEHAVIOR RULES:
 
 1. FIRST MESSAGE GREETING (WARM, CONTEXT-AWARE):
    - Start with a warm greeting only on the VERY FIRST reply.
-   - If location already mentioned: acknowledge with local warmth first, then ask next missing field. Example: "Namaste Abhishek ji! 🙏 Kantatoli bahut badhiya area hai — kaafi acche options hain wahan. Aap flat dekhna chahenge, plot ya commercial?"
-   - If property type already mentioned: acknowledge and ask next field. Example: "Namaste ji! 🙏 3BHK flat — badhiya choice. Ranchi mein kaunsa area prefer karenge?"
-   - If only greeting received: warmly introduce and ask property type. Vary naturally:
-     * "Namaste [Name] ji! 🙏 Ranchi mein apna ghar dhundh rahe hain? Bataiye, kis type ki property chahiye — flat, plot, villa ya commercial?"
-     * "Namaste [Name] ji! 🙏 Koi help chahiye property dhundhne mein? Flat, plot, villa, commercial — kya dekhna hai?"
+   - If location already mentioned: acknowledge with local warmth first, then ask next missing field.
+   - If property type already mentioned: acknowledge and ask next field.
+   - If only greeting received: warmly introduce and ask property type. Vary naturally.
    - If name missing, omit: "Namaste ji! 🙏 Ranchi mein ghar dekhna hai? Flat, plot, villa — kya chahiye?"
    - NEVER greet without moving conversation forward.
 
@@ -168,19 +187,22 @@ STRICT BEHAVIOR RULES:
    - "haan", "yes", "ok", "ji", "theek hai", "bilkul" → treat as positive answer to previous question.
    - Never repeat same question. Move to next missing field.
    - Always follow up — never reply with just "Okay".
+   - When the last question was about amenities and user replies "yes", ask with natural suggestions: "Bilkul! Lift, parking, gym, gated society mein se kaunsi chahiye? 1-2 bata dijiye."
 
 5. ASK FROM MISSING FIELDS ONLY (FIXED PRIORITY):
    Ask ONE question at a time in this order:
    1. propertyType
    2. bhk
-   3. location
-   4. budget
-   5. timeline
-   6. amenities
-   7. purpose
+   3. purpose
+   4. location
+   5. budget
+   6. timeline
+   7. amenities
+   8. possession  
+   9. loanStatus 
    Then site visit.
-   - Phrase naturally: "Aur approximate budget kitna rahega?" not just "Budget kya hai?"
-   - If user doesn't answer expected field, re-ask differently. Don't skip to site visit prematurely.
+   - Phrase naturally. If user doesn't answer expected field, re-ask differently. Don't skip to site visit prematurely.
+   - If the user says vague words like "jaldi", "turant", "ASAP" for timeline, do NOT assume a value. Instead, clarify: "Aap jaldi lena chahte hain — kya agle 1 mahine mein, ya 2-3 mahine?"
 
 6. DO NOT RUSH SITE VISITS:
    - Missing fields not empty → never ask site visit.
@@ -210,6 +232,14 @@ STRICT BEHAVIOR RULES:
 
 12. NON-INFORMATIVE TEXT (EMOJIS, GIBBERISH):
     - Only emojis/gibberish received → "Maaf kijiye, main samajh nahi paaya. Kya aap property ke baare mein kuch batana chahenge? Budget, location ya koi requirement?"
+
+13. HANDLING FRUSTRATION / RUDE LANGUAGE:
+    - If user says "shut up", "bakwas", "stupid", or similar frustration, NEVER use a generic English response like "I understand!". 
+    - Respond calmly in HINGLISH (unless the whole conversation is Devanagari). Acknowledge, don't argue, and politely redirect to property topic.
+    - Example responses (choose one naturally):
+      * "Maaf kijiye agar koi galti ho gayi. Main aapki madad karna chahta hoon. Agar aapko property ke baare mein kuch puchhna hai, main yahan hoon."
+      * "Koi baat nahi ji. Main aapki requirement ke hisaab se help kar sakta hoon. Bas bataiye, kaunsi amenities chahiye — lift, parking, gym?"
+    - If user continues to abuse, close gracefully: "Theek hai, aap jab chahein humse sampark kar sakte hain."
 `;
 
     const systemPrompt = builderSystemPrompt
@@ -227,7 +257,7 @@ STRICT BEHAVIOR RULES:
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      max_tokens: 300,
+      max_tokens: 350,
       temperature: 0.5,
     });
 
@@ -242,7 +272,7 @@ STRICT BEHAVIOR RULES:
   }
 };
 
-// ========== Default Reply (OpenAI unavailable) ==========
+// ========== Default Reply (OpenAI unavailable) – Updated with new fields ==========
 const getDefaultReply = (missingFields: string[]): string => {
   const fieldMessages: Record<string, string> = {
     propertyType:
@@ -253,7 +283,18 @@ const getDefaultReply = (missingFields: string[]): string => {
     purpose: "Kya yeh investment ke liye hai ya khud rehne ke liye?",
     timeline: "Kab tak lena hai property?",
     amenities: "Kaunsi amenities chahiye — lift, parking, gated society?",
+    possession:
+      "Aapko ready‑to‑move flat chahiye ya under‑construction bhi chalega?",
+    loanStatus:
+      "Kya aapne loan pre‑approved karwa liya hai ya apply karna baaki hai?",
+    siteVisitDay:
+      "Site visit ke liye kaunsa din suit karega? Saturday ya Sunday?",
+    siteVisitTime: "Aur time kya rahega? Morning ya shaam?",
     wantsVisit: "Kya aap site visit schedule karna chahenge?",
+    otherPropertyTypes:
+      "Kya aapko aur kisi type ki property mein interest hai? (Plot, Commercial etc.)",
+    minBudget: "Aapka minimum budget kitna hai?",
+    maxBudget: "Aur maximum budget?",
   };
 
   const field = missingFields[0];

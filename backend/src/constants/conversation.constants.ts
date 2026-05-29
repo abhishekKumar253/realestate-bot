@@ -7,6 +7,11 @@ export const REQUIRED_LEAD_FIELDS = [
   "purpose",
   "timeline",
   "name",
+  "amenities",
+  "possession",
+  "loanStatus",
+  "siteVisitDay",
+  "siteVisitTime",
 ] as const;
 
 // ========== Site Visit Affirmative Patterns ==========
