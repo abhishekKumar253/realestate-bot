@@ -84,23 +84,36 @@ const buildUpdateData = (
   extracted: ExtractedLeadData
 ): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
-  if (extracted.name) data.name = extracted.name;
-  if (extracted.propertyType) data.propertyType = extracted.propertyType;
-  if (extracted.budget) data.budget = extracted.budget;
-  if (extracted.location) data.location = extracted.location;
-  if (extracted.bhk) data.bhk = extracted.bhk;
-  if (extracted.purpose) data.purpose = extracted.purpose;
-  if (extracted.timeline) data.timeline = extracted.timeline;
-  if (extracted.amenities) data.amenities = extracted.amenities;
-  if (extracted.possession) data.possession = extracted.possession;
-  if (extracted.loanStatus) data.loanStatus = extracted.loanStatus;
-  if (extracted.siteVisitDay) data.siteVisitDay = extracted.siteVisitDay;
-  if (extracted.siteVisitTime) data.siteVisitTime = extracted.siteVisitTime;
-  // New fields
-  if (extracted.otherPropertyTypes)
-    data.otherPropertyTypes = extracted.otherPropertyTypes;
+
+  // All common fields where existence (truthy) is enough
+  const simpleFields: (keyof ExtractedLeadData)[] = [
+    "name",
+    "propertyType",
+    "budget",
+    "location",
+    "bhk",
+    "purpose",
+    "timeline",
+    "amenities",
+    "possession",
+    "loanStatus",
+    "siteVisitDay",
+    "siteVisitTime",
+    "visitNote",
+    "otherPropertyTypes",
+  ];
+
+  for (const field of simpleFields) {
+    const value = extracted[field];
+    if (value) {
+      data[field] = value;
+    }
+  }
+
+  // minBudget / maxBudget need different check (0 is valid)
   if (extracted.minBudget !== undefined) data.minBudget = extracted.minBudget;
   if (extracted.maxBudget !== undefined) data.maxBudget = extracted.maxBudget;
+
   return data;
 };
 
@@ -122,30 +135,153 @@ const fieldToState: Record<string, ConversationState> = {
   siteVisitDay: ConversationState.ASK_SITE_VISIT_DAY,
 };
 
+const hasSiteVisitSignal = (text: string): boolean => {
+  const lower = text.toLowerCase().trim();
+  return (
+    SITE_VISIT_AFFIRMATIVE_PATTERNS.some((p) => lower.includes(p)) ||
+    lower.includes("site visit") ||
+    lower.includes("visit") ||
+    lower.includes("weekend") ||
+    lower.includes("saturday") ||
+    lower.includes("sunday") ||
+    lower.includes("office") ||
+    lower.includes("milne") ||
+    lower.includes("demo") ||
+    lower.includes("arrange")
+  );
+};
+
+const isShortPositiveReply = (text: string): boolean => {
+  const lower = text
+    .toLowerCase()
+    .trim()
+    .replace(/[.,!?]/g, "");
+  const words = lower.split(/\s+/).filter(Boolean);
+  return (
+    words.length <= 5 &&
+    [
+      "haan",
+      "ha",
+      "ji",
+      "yes",
+      "ready",
+      "taiyaar",
+      "tayaar",
+      "bilkul",
+      "ok",
+      "okay",
+      "theek hai",
+      "theek",
+      "haan ji",
+      "haanji",
+    ].some((p) => lower.includes(p))
+  );
+};
+
+const getLastAssistantMessage = (
+  history: { role: MessageRole; content: string }[]
+): string => {
+  return (
+    [...history].reverse().find((msg) => msg.role === MessageRole.BOT)
+      ?.content ?? ""
+  );
+};
+
+// ✅ Helper: resolve site visit intent
+function resolveSiteVisitIntent(
+  userText: string,
+  extracted: ExtractedLeadData,
+  lastAssistantMessage: string
+): boolean {
+  const lowerMsg = userText.toLowerCase().trim();
+  const assistantAskedSiteVisit = hasSiteVisitSignal(lastAssistantMessage);
+  const explicitSiteVisitSignal = hasSiteVisitSignal(lowerMsg);
+  const shortPositiveReply = isShortPositiveReply(lowerMsg);
+
+  const siteVisitIntent = Boolean(
+    extracted.wantsVisit ||
+      extracted.siteVisitDay ||
+      extracted.siteVisitTime ||
+      extracted.visitNote ||
+      explicitSiteVisitSignal ||
+      (assistantAskedSiteVisit && shortPositiveReply)
+  );
+
+  if (
+    assistantAskedSiteVisit ||
+    explicitSiteVisitSignal ||
+    extracted.siteVisitDay ||
+    extracted.siteVisitTime ||
+    extracted.visitNote
+  ) {
+    extracted.wantsVisit = siteVisitIntent;
+  } else {
+    extracted.wantsVisit = false;
+  }
+
+  return siteVisitIntent;
+}
+
+// ✅ NEW Helper: handle completion (broker notification + status)
+async function handleCompletion(
+  lead: Awaited<ReturnType<typeof getOrCreateLead>>,
+  builder: BuilderWithToken,
+  mergedLead: Record<string, unknown>
+) {
+  await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
+
+  if (builder.notificationPhone) {
+    await sendLeadNotification(
+      builder.phoneNumberId,
+      builder.accessToken,
+      builder.notificationPhone,
+      {
+        name: mergedLead.name as string | null,
+        phone: lead.phone,
+        propertyType: mergedLead.propertyType as string | null,
+        budget: mergedLead.budget as string | null,
+        location: mergedLead.location as string | null,
+        bhk: mergedLead.bhk as string | null,
+        purpose: mergedLead.purpose as string | null,
+        timeline: mergedLead.timeline as string | null,
+        amenities: mergedLead.amenities as string | null,
+        possession: mergedLead.possession as string | null,
+        loanStatus: mergedLead.loanStatus as string | null,
+        siteVisitDay: mergedLead.siteVisitDay as string | null,
+        siteVisitTime: mergedLead.siteVisitTime as string | null,
+        otherPropertyTypes: mergedLead.otherPropertyTypes as string | null,
+        minBudget: mergedLead.minBudget as number | null,
+        maxBudget: mergedLead.maxBudget as number | null,
+      },
+      builder.businessName
+    ).catch((err) => logger.error({ err }, "❌ Broker notification failed"));
+  } else {
+    logger.warn(
+      { builderId: builder.id },
+      "⚠️ No notificationPhone set for builder"
+    );
+  }
+}
+
 const computeNewState = (
   currentState: ConversationState,
   missingFields: string[],
   wantsVisit: boolean
 ): ConversationState => {
-  if (currentState === ConversationState.COMPLETED) {
+  if (currentState === ConversationState.COMPLETED)
     return ConversationState.COMPLETED;
-  }
-
   if (missingFields.length > 0) {
     const firstMissing = missingFields[0];
     return firstMissing && fieldToState[firstMissing]
       ? fieldToState[firstMissing]
       : currentState;
   }
-
-  if (currentState === ConversationState.ASK_SITE_VISIT && wantsVisit) {
+  if (currentState === ConversationState.ASK_SITE_VISIT && wantsVisit)
     return ConversationState.COMPLETED;
-  }
-
   return ConversationState.ASK_SITE_VISIT;
 };
 
-// ========== Core Message Processing ==========
+// ========== Core Message Processing (low complexity) ==========
 async function processIncomingMessage(
   phone: string,
   userText: string,
@@ -169,15 +305,9 @@ async function processIncomingMessage(
   // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // 3. Site visit intent — only in ASK_SITE_VISIT state
-  if (conversation.state === ConversationState.ASK_SITE_VISIT) {
-    const lowerMsg = userText.toLowerCase().trim();
-    extracted.wantsVisit = SITE_VISIT_AFFIRMATIVE_PATTERNS.some((p) =>
-      lowerMsg.includes(p)
-    );
-  } else {
-    extracted.wantsVisit = false;
-  }
+  // 3. Resolve site visit intent (helper)
+  const lastAssistantMessage = getLastAssistantMessage(history);
+  resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
 
   // 4. Save user message
   await saveMessage(
@@ -187,14 +317,14 @@ async function processIncomingMessage(
     whatsappMessageId
   );
 
-  // 5. Update lead with extracted data
+  // 5. Update lead
   const updateData = buildUpdateData(extracted);
   const freshLead =
     Object.keys(updateData).length > 0
       ? await updateLead(lead.id, updateData)
       : lead;
 
-  // 6. Compute missing fields from fresh data
+  // 6. mergedLead
   const mergedLead = {
     propertyType: freshLead.propertyType,
     budget: freshLead.budget,
@@ -215,53 +345,19 @@ async function processIncomingMessage(
 
   const missingFields = getMissingFields(mergedLead);
 
-  // 7. Compute new state
-  const newState = computeNewState(
+  // 7. Compute state
+  const finalState = computeNewState(
     conversation.state,
     missingFields,
     extracted.wantsVisit ?? false
   );
 
-  const finalState = newState;
-
-  // 8. Status update + broker notification (only on completion)
+  // 8. Handle completion (helper)
   if (
     finalState === ConversationState.COMPLETED &&
     missingFields.length === 0
   ) {
-    await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
-
-    if (builder.notificationPhone) {
-      await sendLeadNotification(
-        builder.phoneNumberId,
-        builder.accessToken,
-        builder.notificationPhone,
-        {
-          name: mergedLead.name,
-          phone: lead.phone,
-          propertyType: mergedLead.propertyType,
-          budget: mergedLead.budget,
-          location: mergedLead.location,
-          bhk: mergedLead.bhk,
-          purpose: mergedLead.purpose,
-          timeline: mergedLead.timeline,
-          amenities: mergedLead.amenities,
-          possession: mergedLead.possession,
-          loanStatus: mergedLead.loanStatus,
-          siteVisitDay: mergedLead.siteVisitDay,
-          siteVisitTime: mergedLead.siteVisitTime,
-          otherPropertyTypes: mergedLead.otherPropertyTypes,
-          minBudget: mergedLead.minBudget,
-          maxBudget: mergedLead.maxBudget,
-        },
-        builder.businessName
-      ).catch((err) => logger.error({ err }, "❌ Broker notification failed"));
-    } else {
-      logger.warn(
-        { builderId: builder.id },
-        "⚠️ No notificationPhone set for builder"
-      );
-    }
+    await handleCompletion(lead, builder, mergedLead);
   }
 
   // 9. Update conversation state
@@ -277,7 +373,6 @@ async function processIncomingMessage(
 
   // 11. Generate reply
   const userLanguage = detectLanguage(userText);
-
   const reply = await generateReply(
     missingFields,
     {
