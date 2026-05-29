@@ -54,7 +54,7 @@ export const startFollowUpJob = () => {
             accessToken,
             lead.phone,
             "lead_follow_up_reminder", 
-            "hii",
+            "hi",
             [name]
           );
 
