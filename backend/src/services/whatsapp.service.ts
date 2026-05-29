@@ -237,72 +237,7 @@ export const sendTemplateMessage = async (
   }
 };
 
-// ========== Notification helpers (reduce cognitive complexity) ==========
-
-function buildPropertyPart(lead: {
-  propertyType?: string | null;
-  bhk?: string | null;
-}): string | null {
-  if (!lead.propertyType) return null;
-  const bhkSuffix = lead.bhk ? " (" + lead.bhk + ")" : "";
-  return "🏡 Property: " + lead.propertyType + bhkSuffix;
-}
-
-function buildBudgetPart(lead: {
-  minBudget?: number | null;
-  maxBudget?: number | null;
-  budget?: string | null;
-}): string | null {
-  if (lead.minBudget != null && lead.maxBudget != null) {
-    const minL = (lead.minBudget / 100000).toFixed(0);
-    const maxL = (lead.maxBudget / 100000).toFixed(0);
-    if (lead.minBudget === lead.maxBudget) {
-      return "💰 Budget: ₹" + minL + " Lakh";
-    }
-    return "💰 Budget: ₹" + minL + "–" + maxL + " Lakh";
-  }
-  if (lead.budget) {
-    return "💰 Budget: " + lead.budget;
-  }
-  return null;
-}
-
-function buildPurposePart(
-  lead: { purpose?: string | null },
-  purposeMap: Record<string, string>
-): string | null {
-  if (!lead.purpose) return null;
-  return "🎯 Purpose: " + (purposeMap[lead.purpose] ?? lead.purpose);
-}
-
-function buildTimelinePart(
-  lead: { timeline?: string | null },
-  timelineMap: Record<string, string>
-): string | null {
-  if (!lead.timeline) return null;
-  return "⏰ Timeline: " + (timelineMap[lead.timeline] ?? lead.timeline);
-}
-
-function buildPossessionPart(
-  lead: { possession?: string | null },
-  possessionMap: Record<string, string>
-): string | null {
-  if (!lead.possession) return null;
-  return (
-    "🏗️ Possession: " + (possessionMap[lead.possession] ?? lead.possession)
-  );
-}
-
-function buildSiteVisitPart(lead: {
-  siteVisitDay?: string | null;
-  siteVisitTime?: string | null;
-}): string | null {
-  if (!lead.siteVisitDay) return null;
-  const timeSuffix = lead.siteVisitTime ? " at " + lead.siteVisitTime : "";
-  return "📅 Site Visit: " + lead.siteVisitDay + timeSuffix;
-}
-
-// ========== Send Lead Notification to Broker (REFACTORED) ==========
+// ========== Send Lead Notification to Broker (TEMPLATE-BASED) ==========
 export const sendLeadNotification = async (
   phoneNumberId: string,
   accessToken: string,
@@ -344,50 +279,30 @@ export const sendLeadNotification = async (
     UNDER_CONSTRUCTION: "Under construction",
   };
 
-  const parts: string[] = [
-    `🏠 *New Lead for ${businessName}*`,
-    `👤 Naam: ${lead.name ?? "Unknown"}`,
-    `📞 Phone: +${lead.phone}`,
+  // 14 template parameters matching lead_notification_v4
+  const templateParams = [
+    businessName, 
+    lead.name ?? "Unknown",
+    `+${lead.phone}`,
+    lead.propertyType ?? "N/A", 
+    lead.bhk ?? "", 
+    lead.location ?? "N/A", 
+    lead.budget ?? "N/A", 
+    lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A",
+    lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A",
+    lead.siteVisitDay ?? "TBD", 
+    lead.siteVisitTime ?? "TBD", 
+    lead.amenities ?? "N/A",
+    lead.possession ? possessionMap[lead.possession] ?? lead.possession : "N/A",
+    lead.loanStatus ?? "N/A",
   ];
 
-  // Build each part using helpers – no nesting, low complexity
-  const propertyPart = buildPropertyPart(lead);
-  if (propertyPart) parts.push(propertyPart);
-
-  if (lead.otherPropertyTypes) {
-    parts.push("🔁 Also interested in: " + lead.otherPropertyTypes);
-  }
-
-  if (lead.location) parts.push("📍 Location: " + lead.location);
-
-  const budgetPart = buildBudgetPart(lead);
-  if (budgetPart) parts.push(budgetPart);
-
-  const purposePart = buildPurposePart(lead, purposeMap);
-  if (purposePart) parts.push(purposePart);
-
-  const timelinePart = buildTimelinePart(lead, timelineMap);
-  if (timelinePart) parts.push(timelinePart);
-
-  if (lead.amenities) parts.push("🛠️ Amenities: " + lead.amenities);
-
-  const possessionPart = buildPossessionPart(lead, possessionMap);
-  if (possessionPart) parts.push(possessionPart);
-
-  if (lead.loanStatus) parts.push("🏦 Loan: " + lead.loanStatus);
-
-  const visitPart = buildSiteVisitPart(lead);
-  if (visitPart) parts.push(visitPart);
-
-  const message = parts.join("\n");
-
-  try {
-    await sendTextMessage(phoneNumberId, accessToken, brokerPhone, message);
-    logger.info({ brokerPhone }, "✅ Detailed lead notification sent");
-  } catch (error) {
-    logger.error(
-      { error, brokerPhone },
-      "❌ Failed to send detailed lead notification"
-    );
-  }
+  await sendTemplateMessage(
+    phoneNumberId,
+    accessToken,
+    brokerPhone,
+    "lead_notification_v4", // <-- new template name
+    "en",
+    templateParams
+  ).catch((err) => logger.error({ err }, "❌ Template notification failed"));
 };
