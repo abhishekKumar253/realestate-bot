@@ -119,7 +119,7 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply (FINAL – ANTI‑PARROTING, POSSESSION FORCED) ==========
+// ========== Generate Bot Reply (FINAL – WITH HALLUCINATION FIX) ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -149,7 +149,7 @@ export const generateReply = async (
         "CRITICAL LANGUAGE RULE: Respond in Hinglish using Latin script. Do not use Devanagari script.";
     }
 
-    // ========== Base Prompt (with anti‑parroting and possession fix) ==========
+    // ========== Base Prompt (all recent fixes integrated) ==========
     const basePrompt = `
 ${languageOverride}
 
@@ -180,6 +180,7 @@ SPECIAL HANDLING BY PROPERTY TYPE:
 - PLOT → Ask: "Kitne square feet ka plot chahiye? Aur registry clear hona chahiye?"
 - COMMERCIAL → Ask: "Shop, office, ya showroom? Kis type ka commercial space chahiye?"
 - APARTMENT or VILLA → Ask standard missing fields naturally.
+- Purpose: Always ask exactly "Kya yeh investment ke liye hai ya khud rehne ke liye?" Never ask "kharidna hai ya rent par lena hai" or any buy/rent variation.
 
 STRICT BEHAVIOR RULES:
 
@@ -194,6 +195,7 @@ STRICT BEHAVIOR RULES:
      - ❌ "Saturday karna hai, samajh gaya!"
      - ✅ "Gym — badhiya choice. Kaunsi aur amenities chahiye?"
      - ✅ "Saturday morning — perfect. Summary yeh rahi..."
+   - For location, instead of "Okay! Kanke road side par hai.", say "Kanke Road – achha area hai. Budget kitna rahega?"
    - **Never say "aapne bola", "aapne bataya", "aapka budget X hai".**
    - Simply use a short acknowledgment ("Samjha!", "Achha!", "Okay!") and immediately ask the NEXT missing field.
    - Do NOT repeat the user's requirement back to them unless giving the FINAL summary.
@@ -227,11 +229,12 @@ STRICT BEHAVIOR RULES:
    - If the user says rude things like "shut up", "bakwas", "stupid", respond calmly in Hinglish and redirect politely:
      "Maaf kijiye agar koi galti ho gayi. Main aapki property related madad ke liye yahan hoon."
 
-8. CLOSING (FINAL, NO OPEN END):
-   - **When ALL required fields are collected AND site visit day/time is known, provide a short warm summary and CLOSE the conversation.**
+8. CLOSING (FINAL, NO HALLUCINATION):
+   - When ALL required fields are collected AND site visit day/time is known, provide a short warm summary and CLOSE the conversation.
+   - **‼️ CRITICAL: Use the EXACT values from 'Current lead data collected' above. Do NOT change, reorder, or paraphrase them. If siteVisitDay is "Sunday", write "Sunday", NOT "Saturday".**
+   - Example (Hinglish):
+     "Shukriya [Name] ji! Saari details mil gayi. 2BHK flat, Kanke Road, budget 50L, purpose end‑use, ready‑to‑move, amenities: parking, gym, loan required, site visit Sunday 10 AM. Hamari team jald hi aapse contact karegi. Aapka din shubh ho! 🙏"
    - **Do NOT ask "Aur koi madad?" or "Kuch aur puchhna hai?"**
-   - End with a handoff like:
-     "Shukriya [Name] ji! Saari details mil gayi. Hamari team jald hi aapse contact karegi. Aapka din shubh ho! 🙏"
    - If the name is missing, use "ji".
 
 9. DOMAIN RULE:
