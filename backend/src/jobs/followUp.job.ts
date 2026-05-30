@@ -78,15 +78,15 @@ const startFollowUpCron = () => {
   logger.info("✅ Follow-up cron scheduled — every 2 hours");
 };
 
-// ─── Helper: send daily summary to a single builder ───────────────────────────
+// ─── Helper: send daily summary to a single builder (FIXED: removed site visit count) ─────
 const sendDailySummaryToBuilder = async (builder: any) => {
   const accessToken = decryptToken(builder.encryptedToken);
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [totalLeads, todayLeads, qualifiedLeads, siteVisitLeads, lostLeads] =
-    await Promise.all([
+  const [totalLeads, todayLeads, qualifiedLeads, lostLeads] = await Promise.all(
+    [
       prisma.lead.count({ where: { builderId: builder.id } }),
       prisma.lead.count({
         where: { builderId: builder.id, createdAt: { gte: todayStart } },
@@ -95,15 +95,10 @@ const sendDailySummaryToBuilder = async (builder: any) => {
         where: { builderId: builder.id, status: LeadStatus.QUALIFIED },
       }),
       prisma.lead.count({
-        where: {
-          builderId: builder.id,
-          status: LeadStatus.SITE_VISIT_SCHEDULED,
-        },
-      }),
-      prisma.lead.count({
         where: { builderId: builder.id, status: LeadStatus.LOST },
       }),
-    ]);
+    ]
+  );
 
   const todayLeadDetails = await prisma.lead.findMany({
     where: { builderId: builder.id, createdAt: { gte: todayStart } },
@@ -121,7 +116,6 @@ const sendDailySummaryToBuilder = async (builder: any) => {
   summary += `🏢 *${builder.businessName}*\n\n`;
   summary += `📈 *Aaj ke Stats:*\n`;
   summary += `• Naye leads aaj: *${todayLeads}*\n`;
-  summary += `• Site visit scheduled: *${siteVisitLeads}*\n`;
   summary += `• Qualified leads: *${qualifiedLeads}*\n`;
   summary += `• Lost leads: *${lostLeads}*\n`;
   summary += `• Total leads (all time): *${totalLeads}*\n`;
@@ -145,39 +139,43 @@ const sendDailySummaryToBuilder = async (builder: any) => {
   await sendTextMessage(
     builder.phoneNumberId,
     accessToken,
-    builder.notificationPhone!,
+    builder.notificationPhone,
     summary
   );
 
   logger.info({ builderId: builder.id, todayLeads }, "✅ Daily summary sent");
 };
 
-// ─── Daily Summary Cron ───────────────────────────────────────────────────────
+// ─── Daily Summary Cron (FIXED: timezone Asia/Kolkata, removed site visit count) ─────────
 const startDailySummaryCron = () => {
-  cron.schedule("0 9 * * *", async () => {
-    logger.info("📊 Daily summary job started");
+  cron.schedule(
+    "0 9 * * *",
+    async () => {
+      logger.info("📊 Daily summary job started");
 
-    try {
-      const builders = await prisma.builder.findMany({
-        where: { isActive: true, notificationPhone: { not: null } },
-      });
+      try {
+        const builders = await prisma.builder.findMany({
+          where: { isActive: true, notificationPhone: { not: null } },
+        });
 
-      for (const builder of builders) {
-        try {
-          await sendDailySummaryToBuilder(builder);
-        } catch (err) {
-          logger.error(
-            { err, builderId: builder.id },
-            "❌ Summary failed for builder"
-          );
+        for (const builder of builders) {
+          try {
+            await sendDailySummaryToBuilder(builder);
+          } catch (err) {
+            logger.error(
+              { err, builderId: builder.id },
+              "❌ Summary failed for builder"
+            );
+          }
         }
+      } catch (error) {
+        logger.error({ error }, "❌ Daily summary job failed");
       }
-    } catch (error) {
-      logger.error({ error }, "❌ Daily summary job failed");
-    }
-  });
+    },
+    { timezone: "Asia/Kolkata" } // ✅ 9 AM IST
+  );
 
-  logger.info("✅ Daily summary cron scheduled — daily at 9 AM");
+  logger.info("✅ Daily summary cron scheduled — daily at 9 AM IST");
 };
 
 // ─── Export ───────────────────────────────────────────────────────────────────

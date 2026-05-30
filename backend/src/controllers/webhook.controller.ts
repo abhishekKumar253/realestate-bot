@@ -41,7 +41,7 @@ import type {
 import { prisma } from "../db/prisma";
 import {
   REQUIRED_LEAD_FIELDS,
-  SITE_VISIT_AFFIRMATIVE_PATTERNS,
+  // SITE_VISIT_AFFIRMATIVE_PATTERNS,  // Dead code – commented
   OPT_OUT_PHRASES,
 } from "../constants/conversation.constants";
 
@@ -153,6 +153,7 @@ const getMissingFields = (lead: Record<string, unknown>): string[] => {
   return [...REQUIRED_LEAD_FIELDS].filter((f) => !lead[f]);
 };
 
+// fieldToState – only used states for rapid mode (rest commented)
 const fieldToState: Record<string, ConversationState> = {
   propertyType: ConversationState.ASK_PROPERTY_TYPE,
   budget: ConversationState.ASK_BUDGET,
@@ -161,106 +162,25 @@ const fieldToState: Record<string, ConversationState> = {
   purpose: ConversationState.ASK_PURPOSE,
   timeline: ConversationState.ASK_TIMELINE,
   name: ConversationState.ASK_NAME,
-  amenities: ConversationState.ASK_AMENITIES,
-  possession: ConversationState.ASK_POSSESSION,
-  loanStatus: ConversationState.ASK_LOAN_STATUS,
-  siteVisitDay: ConversationState.ASK_SITE_VISIT_DAY,
+  // amenities: ConversationState.ASK_AMENITIES,
+  // possession: ConversationState.ASK_POSSESSION,
+  // loanStatus: ConversationState.ASK_LOAN_STATUS,
+  // siteVisitDay: ConversationState.ASK_SITE_VISIT_DAY,
 };
 
-const hasSiteVisitSignal = (text: string): boolean => {
-  const lower = text.toLowerCase().trim();
-  return (
-    SITE_VISIT_AFFIRMATIVE_PATTERNS.some((p) => lower.includes(p)) ||
-    lower.includes("site visit") ||
-    lower.includes("visit") ||
-    lower.includes("weekend") ||
-    lower.includes("saturday") ||
-    lower.includes("sunday") ||
-    lower.includes("office") ||
-    lower.includes("milne") ||
-    lower.includes("demo") ||
-    lower.includes("arrange")
-  );
-};
+// ========== Dead site‑visit code (commented out – rapid mode mein nahi chahiye) ==========
+// const hasSiteVisitSignal = (text: string): boolean => { ... }
+// const isShortPositiveReply = (text: string): boolean => { ... }
+// function resolveSiteVisitIntent(...): boolean { ... }
 
-const isShortPositiveReply = (text: string): boolean => {
-  const lower = text
-    .toLowerCase()
-    .trim()
-    .replace(/[.,!?]/g, "");
-  const words = lower.split(/\s+/).filter(Boolean);
-  return (
-    words.length <= 5 &&
-    [
-      "haan",
-      "ha",
-      "ji",
-      "yes",
-      "ready",
-      "taiyaar",
-      "tayaar",
-      "bilkul",
-      "ok",
-      "okay",
-      "theek hai",
-      "theek",
-      "haan ji",
-      "haanji",
-    ].some((p) => lower.includes(p))
-  );
-};
-
-const getLastAssistantMessage = (
-  history: { role: MessageRole; content: string }[]
-): string => {
-  return (
-    [...history].reverse().find((msg) => msg.role === MessageRole.BOT)
-      ?.content ?? ""
-  );
-};
-
-// ✅ Helper: resolve site visit intent
-function resolveSiteVisitIntent(
-  userText: string,
-  extracted: ExtractedLeadData,
-  lastAssistantMessage: string
-): boolean {
-  const lowerMsg = userText.toLowerCase().trim();
-  const assistantAskedSiteVisit = hasSiteVisitSignal(lastAssistantMessage);
-  const explicitSiteVisitSignal = hasSiteVisitSignal(lowerMsg);
-  const shortPositiveReply = isShortPositiveReply(lowerMsg);
-
-  const siteVisitIntent = Boolean(
-    extracted.wantsVisit ||
-      extracted.siteVisitDay ||
-      extracted.siteVisitTime ||
-      extracted.visitNote ||
-      explicitSiteVisitSignal ||
-      (assistantAskedSiteVisit && shortPositiveReply)
-  );
-
-  if (
-    assistantAskedSiteVisit ||
-    explicitSiteVisitSignal ||
-    extracted.siteVisitDay ||
-    extracted.siteVisitTime ||
-    extracted.visitNote
-  ) {
-    extracted.wantsVisit = siteVisitIntent;
-  } else {
-    extracted.wantsVisit = false;
-  }
-
-  return siteVisitIntent;
-}
 
 // ✅ Helper: handle completion (broker notification + status)
 async function handleCompletion(
-  lead: Awaited<ReturnType<typeof getOrCreateLead>>,
+  lead: Awaited<ReturnType<typeof getOrCreateLead>>, // now receives freshLead
   builder: BuilderWithToken,
   mergedLead: Record<string, unknown>
 ) {
-  await updateLeadStatus(lead.id, LeadStatus.SITE_VISIT_SCHEDULED);
+  await updateLeadStatus(lead.id, LeadStatus.QUALIFIED);
 
   if (builder.notificationPhone) {
     await sendLeadNotification(
@@ -295,10 +215,10 @@ async function handleCompletion(
   }
 }
 
+// Compute new state – removed _wantsVisit parameter
 const computeNewState = (
   currentState: ConversationState,
-  missingFields: string[],
-  _wantsVisit: boolean
+  missingFields: string[]
 ): ConversationState => {
   if (currentState === ConversationState.COMPLETED)
     return ConversationState.COMPLETED;
@@ -308,7 +228,7 @@ const computeNewState = (
       ? fieldToState[firstMissing]
       : currentState;
   }
-  // CHANGED: directly COMPLETED — site visit alag nahi poochhna
+  // directly COMPLETED — site visit alag nahi poochhna
   return ConversationState.COMPLETED;
 };
 
@@ -336,17 +256,15 @@ async function processIncomingMessage(
   // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // ✅ Turant typing indicator
-  sendTypingIndicator(
-    builder.phoneNumberId,
-    builder.accessToken,
-    phone,
-    whatsappMessageId
-  ).catch(() => {});
+  // ✅ Turant typing indicator (FIXED: no messageId needed)
+  sendTypingIndicator(builder.phoneNumberId, builder.accessToken, phone).catch(
+    () => {}
+  );
 
-  // 3. Resolve site visit intent
-  const lastAssistantMessage = getLastAssistantMessage(history);
-  resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
+  // 3. Site visit intent – not used in rapid mode, set false
+  // const lastAssistantMessage = getLastAssistantMessage(history);
+  // resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
+  extracted.wantsVisit = false; // force false
 
   // 4. Save user message
   await saveMessage(
@@ -384,27 +302,21 @@ async function processIncomingMessage(
 
   const missingFields = getMissingFields(mergedLead);
 
-  // 7. Compute state
-  const finalState = computeNewState(
-    conversation.state,
-    missingFields,
-    extracted.wantsVisit ?? false
-  );
+  // 7. Compute state (no wantsVisit argument)
+  const finalState = computeNewState(conversation.state, missingFields);
 
-  // 8. Handle completion
+  // 8. Handle completion (pass freshLead instead of old lead)
   if (
     finalState === ConversationState.COMPLETED &&
     missingFields.length === 0
   ) {
-    await handleCompletion(lead, builder, mergedLead);
+    await handleCompletion(freshLead, builder, mergedLead);
   }
 
   // 9. Update conversation state
   await updateConversationState(conversation.id, finalState);
 
-  // 10. (typing indicator already sent)
-
-  // 11. Generate reply
+  // 10. Generate reply
   const userLanguage = detectLanguage(userText);
   const reply = await generateReply(
     missingFields,
@@ -432,7 +344,7 @@ async function processIncomingMessage(
     userLanguage
   );
 
-  // 12. Send reply + save bot message
+  // 11. Send reply + save bot message
   const isSent = await sendTextMessage(
     builder.phoneNumberId,
     builder.accessToken,
@@ -482,7 +394,7 @@ async function sendFallbackIfNeeded(
   return false;
 }
 
-// ✅ NEW: Helper for audio message handling
+// Helper for audio message handling
 async function processIncomingAudio(
   message: IncomingMessage,
   builder: BuilderWithToken
@@ -547,7 +459,7 @@ async function handleOptOut(
   return false;
 }
 
-// 🔄 Fixed: Lead fields reset when a new conversation starts after completion
+// Conversation reset logic (lead fields cleared on COMPLETED)
 async function getActiveConversation(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   phone: string
@@ -560,7 +472,6 @@ async function getActiveConversation(
 
   if (conversation.state === ConversationState.COMPLETED) {
     logger.info({ phone }, "🔄 Conversation reset — clearing old lead fields");
-    // ✅ Purane lead fields clear karo taaki fresh qualification ho
     await updateLead(lead.id, {
       propertyType: null,
       bhk: null,
@@ -582,9 +493,6 @@ async function getActiveConversation(
   }
   return conversation;
 }
-
-// ========== POST — Incoming Messages (with voice note handling) ==========
-// ... (sab imports same)
 
 // ========== POST — Incoming Messages (with voice note handling) ==========
 export const handleIncoming = async (
@@ -609,7 +517,7 @@ export const handleIncoming = async (
     const message = extractMessage(body);
     if (!message) return;
 
-    // ── Voice Note (Audio) Handling ──
+    // Voice Note (Audio) Handling
     let userText: string;
     if (message.type === "audio") {
       const transcript = await processIncomingAudio(message, builder);
@@ -621,7 +529,7 @@ export const handleIncoming = async (
 
     if (!userText.trim()) return;
 
-    // ── Duplicate check ──
+    // Duplicate check
     if (await isDuplicate(message.id)) return;
 
     const contactName = extractContactName(body) ?? undefined;
@@ -656,7 +564,7 @@ export const handleIncoming = async (
       normalizePhone(message.from)
     );
 
-    // ✅ Refresh lead after potential reset (so cleared fields are visible)
+    // Refresh lead after potential reset (so cleared fields are visible)
     if (conversation.state === ConversationState.GREETING) {
       lead = await getOrCreateLead(
         normalizePhone(message.from),

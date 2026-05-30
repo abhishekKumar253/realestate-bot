@@ -162,25 +162,22 @@ export const markAsRead = async (
   }
 };
 
-// ========== Send Typing Indicator ==========
+// ========== Send Typing Indicator (FIXED) ==========
 export const sendTypingIndicator = async (
   phoneNumberId: string,
   accessToken: string,
-  to: string,
-  messageId: string
+  to: string
 ): Promise<void> => {
   try {
     const payload = {
       messaging_product: "whatsapp",
-      status: "read",
-      message_id: messageId,
-      typing_indicator: { type: "text" },
+      recipient_type: "individual",
+      to,
+      type: "typing",
     };
-
     await axios.post(getApiUrl(phoneNumberId), payload, {
       headers: getHeaders(accessToken),
     });
-
     logger.info({ to }, "✅ Typing indicator sent");
   } catch (error: unknown) {
     const metaError =
@@ -243,7 +240,7 @@ export const sendTemplateMessage = async (
   }
 };
 
-// ========== Send Lead Notification to Broker (TEMPLATE-BASED) ==========
+// ========== Send Lead Notification to Broker (Plain Text) ==========
 export const sendLeadNotification = async (
   phoneNumberId: string,
   accessToken: string,
