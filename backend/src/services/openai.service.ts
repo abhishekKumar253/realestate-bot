@@ -3,9 +3,7 @@ import { env } from "../config/index";
 import logger from "../utils/logger";
 import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
-const openai = env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: env.OPENAI_API_KEY })
-  : null;
+const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 // ========== Extracted Lead Data Type ==========
 export interface ExtractedLeadData {
@@ -257,7 +255,7 @@ CONVERSATION FLOW RULES:
       model: "gpt-4o-mini",
       messages,
       max_tokens: 350,
-      temperature: 0.4, // thoda natural feel, par controlled
+      temperature: 0.4, 
     });
 
     const reply = response.choices[0]?.message?.content;
