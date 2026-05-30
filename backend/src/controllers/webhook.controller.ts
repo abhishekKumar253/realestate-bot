@@ -584,6 +584,9 @@ async function getActiveConversation(
 }
 
 // ========== POST — Incoming Messages (with voice note handling) ==========
+// ... (sab imports same)
+
+// ========== POST — Incoming Messages (with voice note handling) ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -610,7 +613,7 @@ export const handleIncoming = async (
     let userText: string;
     if (message.type === "audio") {
       const transcript = await processIncomingAudio(message, builder);
-      if (!transcript) return; // fallback already sent
+      if (!transcript) return;
       userText = transcript;
     } else {
       userText = getUserText(message);
@@ -637,7 +640,7 @@ export const handleIncoming = async (
       message.id
     ).catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
-    const lead = await getOrCreateLead(
+    let lead = await getOrCreateLead(
       normalizePhone(message.from),
       builder.id,
       contactName
@@ -652,6 +655,17 @@ export const handleIncoming = async (
       lead,
       normalizePhone(message.from)
     );
+
+    // ✅ Refresh lead after potential reset (so cleared fields are visible)
+    if (conversation.state === ConversationState.GREETING) {
+      // Yeh nayee conversation hai — lead fields DB mein clear ho gaye hain
+      // par `lead` object purana hai. Use refresh karo.
+      lead = await getOrCreateLead(
+        normalizePhone(message.from),
+        builder.id,
+        contactName
+      );
+    }
 
     await processIncomingMessage(
       normalizePhone(message.from),
