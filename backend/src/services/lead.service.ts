@@ -9,16 +9,24 @@ import {
   MessageRole,
 } from "@prisma/client";
 
-// ========== Types ==========
+// ========== Types (null allowed for reset) ==========
 export interface LeadUpdateData {
-  name?: string;
-  propertyType?: PropertyType;
-  budget?: string;
-  location?: string;
-  bhk?: string;
-  purpose?: Purpose;
-  timeline?: Timeline;
+  name?: string | null;
+  propertyType?: PropertyType | null;
+  budget?: string | null;
+  location?: string | null;
+  bhk?: string | null;
+  purpose?: Purpose | null;
+  timeline?: Timeline | null;
   status?: LeadStatus;
+  amenities?: string | null;
+  possession?: string | null;
+  loanStatus?: string | null;
+  siteVisitDay?: string | null;
+  siteVisitTime?: string | null;
+  otherPropertyTypes?: string | null;
+  minBudget?: number | null;
+  maxBudget?: number | null;
 }
 
 // ========== Get or Create Lead ==========
@@ -30,10 +38,10 @@ export const getOrCreateLead = async (
   try {
     const lead = await prisma.lead.upsert({
       where: {
-        phone_builderId: { phone, builderId }, // composite unique key
+        phone_builderId: { phone, builderId },
       },
       update: {
-        name: name ?? undefined, 
+        name: name ?? undefined,
       },
       create: {
         phone,
@@ -59,8 +67,6 @@ export const getOrCreateLead = async (
         },
       },
     });
-
-    // Redundant extra update block hataya gaya — upsert ka update kaafi hai
 
     if (lead.createdAt.getTime() === lead.updatedAt.getTime()) {
       logger.info({ phone, builderId }, "✅ New lead created");

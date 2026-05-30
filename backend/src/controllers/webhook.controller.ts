@@ -576,7 +576,7 @@ async function getActiveConversation(
       minBudget: null,
       maxBudget: null,
       otherPropertyTypes: null,
-    } as any);
+    });
     conversation = await createNewConversation(lead.id);
     await updateLeadStatus(lead.id, LeadStatus.NEW);
   }
@@ -658,8 +658,6 @@ export const handleIncoming = async (
 
     // ✅ Refresh lead after potential reset (so cleared fields are visible)
     if (conversation.state === ConversationState.GREETING) {
-      // Yeh nayee conversation hai — lead fields DB mein clear ho gaye hain
-      // par `lead` object purana hai. Use refresh karo.
       lead = await getOrCreateLead(
         normalizePhone(message.from),
         builder.id,
