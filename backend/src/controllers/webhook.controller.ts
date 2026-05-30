@@ -298,7 +298,7 @@ async function handleCompletion(
 const computeNewState = (
   currentState: ConversationState,
   missingFields: string[],
-  wantsVisit: boolean
+  _wantsVisit: boolean
 ): ConversationState => {
   if (currentState === ConversationState.COMPLETED)
     return ConversationState.COMPLETED;
@@ -308,9 +308,8 @@ const computeNewState = (
       ? fieldToState[firstMissing]
       : currentState;
   }
-  if (currentState === ConversationState.ASK_SITE_VISIT && wantsVisit)
-    return ConversationState.COMPLETED;
-  return ConversationState.ASK_SITE_VISIT;
+  // CHANGED: directly COMPLETED — site visit alag nahi poochhna
+  return ConversationState.COMPLETED;
 };
 
 // ========== Core Message Processing ==========
