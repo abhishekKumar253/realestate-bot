@@ -1,5 +1,11 @@
 import axios from "axios";
 import logger from "../utils/logger";
+import OpenAI from "openai";
+import { toFile } from "openai/uploads";
+import { env } from "../config/index";
+
+// Whisper client for voice note transcription
+const openaiWhisper = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 const getApiUrl = (phoneNumberId: string) =>
   `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
@@ -281,17 +287,17 @@ export const sendLeadNotification = async (
 
   // 14 template parameters matching lead_notification_v4
   const templateParams = [
-    businessName, 
+    businessName,
     lead.name ?? "Unknown",
     `+${lead.phone}`,
-    lead.propertyType ?? "N/A", 
-    lead.bhk ?? "", 
-    lead.location ?? "N/A", 
-    lead.budget ?? "N/A", 
+    lead.propertyType ?? "N/A",
+    lead.bhk ?? "",
+    lead.location ?? "N/A",
+    lead.budget ?? "N/A",
     lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A",
     lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A",
-    lead.siteVisitDay ?? "TBD", 
-    lead.siteVisitTime ?? "TBD", 
+    lead.siteVisitDay ?? "TBD",
+    lead.siteVisitTime ?? "TBD",
     lead.amenities ?? "N/A",
     lead.possession ? possessionMap[lead.possession] ?? lead.possession : "N/A",
     lead.loanStatus ?? "N/A",
@@ -305,4 +311,52 @@ export const sendLeadNotification = async (
     "en",
     templateParams
   ).catch((err) => logger.error({ err }, "❌ Template notification failed"));
+};
+
+// ========== Voice Note Transcription ==========
+export const transcribeVoiceNote = async (
+  accessToken: string,
+  mediaId: string
+): Promise<string | null> => {
+  try {
+    // 1. Get media URL
+    const mediaRes = await axios.get(
+      `https://graph.facebook.com/v19.0/${mediaId}`,
+      {
+        headers: getHeaders(accessToken),
+      }
+    );
+    const mediaUrl = mediaRes.data.url;
+    if (!mediaUrl) {
+      logger.error({ mediaId }, "❌ No media URL returned");
+      return null;
+    }
+
+    // 2. Download audio file
+    const audioRes = await axios.get(mediaUrl, {
+      responseType: "arraybuffer",
+      headers: getHeaders(accessToken),
+    });
+    const audioBuffer = Buffer.from(audioRes.data);
+
+    // 3. Transcribe with Whisper
+    const audioFile = await toFile(audioBuffer, "voice.ogg");
+    const transcript = await openaiWhisper.audio.transcriptions.create({
+      model: "whisper-1",
+      file: audioFile,
+    });
+
+    logger.info({ transcript: transcript.text }, "✅ Voice note transcribed");
+    return transcript.text;
+  } catch (error: unknown) {
+    const metaError =
+      error instanceof Error
+        ? (error as any).response?.data ?? error.message
+        : error;
+    logger.error(
+      { error: metaError, mediaId },
+      "❌ Voice transcription failed"
+    );
+    return null;
+  }
 };

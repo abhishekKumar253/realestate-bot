@@ -34,25 +34,29 @@ export interface Contact {
 }
 
 export interface IncomingMessage {
-  from: string;
   id: string;
-  timestamp: string;
-  type: "text" | "image" | "audio" | "video" | "document" | "interactive";
-  text?: {
-    body: string;
-  };
+  type:
+    | "text"
+    | "interactive"
+    | "image"
+    | "video"
+    | "document"
+    | "audio"
+    | "location"
+    | "sticker"
+    | "button"
+    | "order"
+    | "system"
+    | "unknown";
+  from: string;
+  text?: { body: string };
   interactive?: {
-    type: string;
-    button_reply?: {
-      id: string;
-      title: string;
-    };
-    list_reply?: {
-      id: string;
-      title: string;
-      description?: string;
-    };
+    button_reply?: { id: string; title: string };
+    list_reply?: { id: string; title: string; description?: string };
   };
+  audio?: { id?: string; mime_type?: string }; 
+  image?: { id: string };
+  video?: { id: string };
 }
 
 export interface Status {

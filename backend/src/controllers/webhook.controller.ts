@@ -27,6 +27,7 @@ import {
   markAsRead,
   sendTypingIndicator,
   sendLeadNotification,
+  transcribeVoiceNote,
 } from "../services/whatsapp.service";
 import {
   getBuilderByPhoneNumberId,
@@ -121,7 +122,6 @@ const buildUpdateData = (
     data.purpose = extracted.purpose;
   }
 
-  // possession and loanStatus are not Prisma enums, but they are expected strings
   const validPossession = new Set(["READY_TO_MOVE", "UNDER_CONSTRUCTION"]);
   if (extracted.possession && validPossession.has(extracted.possession)) {
     data.possession = extracted.possession;
@@ -254,7 +254,7 @@ function resolveSiteVisitIntent(
   return siteVisitIntent;
 }
 
-// ✅ NEW Helper: handle completion (broker notification + status)
+// ✅ Helper: handle completion (broker notification + status)
 async function handleCompletion(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   builder: BuilderWithToken,
@@ -313,7 +313,7 @@ const computeNewState = (
   return ConversationState.ASK_SITE_VISIT;
 };
 
-// ========== Core Message Processing (low complexity) ==========
+// ========== Core Message Processing ==========
 async function processIncomingMessage(
   phone: string,
   userText: string,
@@ -337,7 +337,7 @@ async function processIncomingMessage(
   // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // ✅ Turant typing indicator — user ko lagega bot reply kar raha hai
+  // ✅ Turant typing indicator
   sendTypingIndicator(
     builder.phoneNumberId,
     builder.accessToken,
@@ -345,7 +345,7 @@ async function processIncomingMessage(
     whatsappMessageId
   ).catch(() => {});
 
-  // 3. Resolve site visit intent (helper)
+  // 3. Resolve site visit intent
   const lastAssistantMessage = getLastAssistantMessage(history);
   resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
 
@@ -392,7 +392,7 @@ async function processIncomingMessage(
     extracted.wantsVisit ?? false
   );
 
-  // 8. Handle completion (helper)
+  // 8. Handle completion
   if (
     finalState === ConversationState.COMPLETED &&
     missingFields.length === 0
@@ -403,7 +403,7 @@ async function processIncomingMessage(
   // 9. Update conversation state
   await updateConversationState(conversation.id, finalState);
 
-  // 10. Typing indicator already sent earlier – removed duplicate
+  // 10. (typing indicator already sent)
 
   // 11. Generate reply
   const userLanguage = detectLanguage(userText);
@@ -483,6 +483,35 @@ async function sendFallbackIfNeeded(
   return false;
 }
 
+// ✅ NEW: Helper for audio message handling (reduces cognitive complexity)
+async function processIncomingAudio(
+  message: IncomingMessage,
+  builder: BuilderWithToken
+): Promise<string | null> {
+  const mediaId = message.audio?.id;
+  if (!mediaId) {
+    await sendFallbackIfNeeded(message, builder);
+    return null;
+  }
+
+  const transcript = await transcribeVoiceNote(
+    builder.accessToken,
+    mediaId
+  );
+  if (!transcript) {
+    // Transcription failed – send fallback and stop
+    await sendTextMessage(
+      builder.phoneNumberId,
+      builder.accessToken,
+      normalizePhone(message.from),
+      "Maaf kijiye, main aapka voice note samajh nahi paaya. Kripya text message bhej dijiye. 🙏"
+    );
+    return null;
+  }
+
+  return transcript;
+}
+
 async function isDuplicate(whatsappMessageId: string): Promise<boolean> {
   const existing = await prisma.message.findUnique({
     where: { whatsappMessageId },
@@ -541,7 +570,7 @@ async function getActiveConversation(
   return conversation;
 }
 
-// ========== POST — Incoming Messages ==========
+// ========== POST — Incoming Messages (with voice note handling) ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -563,17 +592,29 @@ export const handleIncoming = async (
 
     const message = extractMessage(body);
     if (!message) return;
-    if (await sendFallbackIfNeeded(message, builder)) return;
 
-    const phone = normalizePhone(message.from);
-    const userText = getUserText(message);
+    // ── Voice Note (Audio) Handling ──
+    let userText: string;
+    if (message.type === "audio") {
+      const transcript = await processIncomingAudio(message, builder);
+      if (!transcript) return; // fallback already sent
+      userText = transcript;
+    } else {
+      userText = getUserText(message);
+    }
+
     if (!userText.trim()) return;
 
+    // ── Duplicate check ──
     if (await isDuplicate(message.id)) return;
 
     const contactName = extractContactName(body) ?? undefined;
     logger.info(
-      { phone, builderId: builder.id, message: userText },
+      {
+        phone: normalizePhone(message.from),
+        builderId: builder.id,
+        message: userText,
+      },
       "📩 Incoming message"
     );
 
@@ -583,14 +624,24 @@ export const handleIncoming = async (
       message.id
     ).catch((err) => logger.warn({ err }, "⚠️ Mark as read failed"));
 
-    const lead = await getOrCreateLead(phone, builder.id, contactName);
+    const lead = await getOrCreateLead(
+      normalizePhone(message.from),
+      builder.id,
+      contactName
+    );
 
-    if (await handleOptOut(lead, userText, builder, phone)) return;
+    if (
+      await handleOptOut(lead, userText, builder, normalizePhone(message.from))
+    )
+      return;
 
-    const conversation = await getActiveConversation(lead, phone);
+    const conversation = await getActiveConversation(
+      lead,
+      normalizePhone(message.from)
+    );
 
     await processIncomingMessage(
-      phone,
+      normalizePhone(message.from),
       userText,
       message.id,
       lead,
