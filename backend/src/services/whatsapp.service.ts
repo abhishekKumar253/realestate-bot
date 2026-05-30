@@ -280,37 +280,29 @@ export const sendLeadNotification = async (
     END_USE: "Khud rehne ke liye",
   };
 
-  const possessionMap: Record<string, string> = {
-    READY_TO_MOVE: "Ready to move",
-    UNDER_CONSTRUCTION: "Under construction",
-  };
+  const message = `🏠 *New Lead — ${businessName}*
 
-  // 14 template parameters matching lead_notification_v4
-  const templateParams = [
-    businessName,
-    lead.name ?? "Unknown",
-    `+${lead.phone}`,
-    lead.propertyType ?? "N/A",
-    lead.bhk ?? "",
-    lead.location ?? "N/A",
-    lead.budget ?? "N/A",
-    lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A",
-    lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A",
-    lead.siteVisitDay ?? "TBD",
-    lead.siteVisitTime ?? "TBD",
-    lead.amenities ?? "N/A",
-    lead.possession ? possessionMap[lead.possession] ?? lead.possession : "N/A",
-    lead.loanStatus ?? "N/A",
-  ];
+👤 *Naam:* ${lead.name ?? "Unknown"}
+📞 *Phone:* +${lead.phone}
+🏡 *Property:* ${lead.propertyType ?? "N/A"} ${lead.bhk ? `(${lead.bhk})` : ""}
+📍 *Location:* ${lead.location ?? "N/A"}
+💰 *Budget:* ${lead.budget ?? "N/A"}
+🎯 *Purpose:* ${lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "N/A"}
+⏰ *Timeline:* ${
+    lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "N/A"
+  }
+${lead.amenities ? `✨ *Amenities:* ${lead.amenities}` : ""}
+${
+  lead.siteVisitDay
+    ? `📅 *Site Visit:* ${lead.siteVisitDay} ${lead.siteVisitTime ?? ""}`
+    : ""
+}
 
-  await sendTemplateMessage(
-    phoneNumberId,
-    accessToken,
-    brokerPhone,
-    "lead_notification_v4", // <-- new template name
-    "en",
-    templateParams
-  ).catch((err) => logger.error({ err }, "❌ Template notification failed"));
+✅ *Lead qualify ho gayi!*`;
+
+  await sendTextMessage(phoneNumberId, accessToken, brokerPhone, message)
+    .then(() => logger.info({ brokerPhone }, "✅ Lead notification sent"))
+    .catch((err) => logger.error({ err }, "❌ Notification failed"));
 };
 
 // ========== Voice Note Transcription ==========
