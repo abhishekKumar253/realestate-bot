@@ -22,7 +22,6 @@ export interface LeadUpdateData {
 }
 
 // ========== Get or Create Lead ==========
-// CHANGED: builderId required — composite key (phone + builderId)
 export const getOrCreateLead = async (
   phone: string,
   builderId: string,
@@ -33,7 +32,9 @@ export const getOrCreateLead = async (
       where: {
         phone_builderId: { phone, builderId }, // composite unique key
       },
-      update: {}, // keep existing data, but we'll manually update name below if needed
+      update: {
+        name: name ?? undefined, 
+      },
       create: {
         phone,
         name,
@@ -59,18 +60,7 @@ export const getOrCreateLead = async (
       },
     });
 
-    // ✅ NEW: If WhatsApp profile name is available but lead had no name, update it
-    if (name && !lead.name) {
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { name },
-      });
-      lead.name = name;
-      logger.info(
-        { leadId: lead.id, name },
-        "📛 Lead name updated from WhatsApp profile"
-      );
-    }
+    // Redundant extra update block hataya gaya — upsert ka update kaafi hai
 
     if (lead.createdAt.getTime() === lead.updatedAt.getTime()) {
       logger.info({ phone, builderId }, "✅ New lead created");
@@ -84,7 +74,6 @@ export const getOrCreateLead = async (
 };
 
 // ========== Update Lead ==========
-// CHANGED: where: { phone } → where: { id: leadId }
 export const updateLead = async (leadId: string, data: LeadUpdateData) => {
   try {
     const updated = await prisma.lead.update({
@@ -180,7 +169,6 @@ export const getConversationHistory = async (conversationId: string) => {
 };
 
 // ========== Update Lead Status ==========
-// CHANGED: where: { phone } → where: { id: leadId }
 export const updateLeadStatus = async (
   leadId: string,
   status: LeadStatus
@@ -199,7 +187,6 @@ export const updateLeadStatus = async (
 };
 
 // ========== Get Lead Summary ==========
-// CHANGED: where: { phone } → where: { id: leadId }
 export const getLeadSummary = async (leadId: string) => {
   try {
     return await prisma.lead.findUnique({

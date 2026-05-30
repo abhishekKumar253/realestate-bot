@@ -1,17 +1,10 @@
 // ========== Lead Required Fields ==========
 export const REQUIRED_LEAD_FIELDS = [
   "propertyType",
-  "budget",
-  "location",
   "bhk",
-  "purpose",
+  "location",
+  "budget",
   "timeline",
-  "name",
-  "amenities",
-  "possession",
-  "loanStatus",
-  "siteVisitDay",
-  "siteVisitTime",
 ] as const;
 
 // ========== Site Visit Affirmative Patterns ==========
