@@ -7,7 +7,8 @@ import { env } from "./config/index";
 import logger from "./utils/logger";
 import { prisma } from "./db/prisma";
 import webhookRouter from "./routes/webhook.route";
-import { startFollowUpJob } from "./jobs/followUp.job"; // <-- added
+import { startFollowUpJob } from "./jobs/followUp.job"; 
+import exportRouter from "./routes/export.route";
 
 const app = express();
 
@@ -40,6 +41,7 @@ const webhookLimiter = rateLimit({
 
 // ========== Routes ==========
 app.use("/webhook", webhookLimiter, webhookRouter);
+app.use("/export", generalLimiter, exportRouter);
 
 // ========== Health Check ==========
 app.get("/health", generalLimiter, (_req, res) => {
