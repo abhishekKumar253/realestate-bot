@@ -482,7 +482,7 @@ async function sendFallbackIfNeeded(
   return false;
 }
 
-// ✅ NEW: Helper for audio message handling (reduces cognitive complexity)
+// ✅ NEW: Helper for audio message handling
 async function processIncomingAudio(
   message: IncomingMessage,
   builder: BuilderWithToken
@@ -493,12 +493,8 @@ async function processIncomingAudio(
     return null;
   }
 
-  const transcript = await transcribeVoiceNote(
-    builder.accessToken,
-    mediaId
-  );
+  const transcript = await transcribeVoiceNote(builder.accessToken, mediaId);
   if (!transcript) {
-    // Transcription failed – send fallback and stop
     await sendTextMessage(
       builder.phoneNumberId,
       builder.accessToken,
@@ -551,6 +547,7 @@ async function handleOptOut(
   return false;
 }
 
+// 🔄 Fixed: Lead fields reset when a new conversation starts after completion
 async function getActiveConversation(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   phone: string
@@ -562,7 +559,24 @@ async function getActiveConversation(
   }
 
   if (conversation.state === ConversationState.COMPLETED) {
-    logger.info({ phone }, "🔄 Conversation reset — new conversation starting");
+    logger.info({ phone }, "🔄 Conversation reset — clearing old lead fields");
+    // ✅ Purane lead fields clear karo taaki fresh qualification ho
+    await updateLead(lead.id, {
+      propertyType: null,
+      bhk: null,
+      location: null,
+      budget: null,
+      timeline: null,
+      amenities: null,
+      possession: null,
+      loanStatus: null,
+      siteVisitDay: null,
+      siteVisitTime: null,
+      purpose: null,
+      minBudget: null,
+      maxBudget: null,
+      otherPropertyTypes: null,
+    } as any);
     conversation = await createNewConversation(lead.id);
     await updateLeadStatus(lead.id, LeadStatus.NEW);
   }
