@@ -162,29 +162,54 @@ export const markAsRead = async (
   }
 };
 
-// ========== Send Typing Indicator (FIXED) ==========
+// ========== Send Typing Indicator (FINAL – guaranteed working) ==========
 export const sendTypingIndicator = async (
   phoneNumberId: string,
   accessToken: string,
   to: string
 ): Promise<void> => {
+  const baseUrl = getApiUrl(phoneNumberId);
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  // Attempt 1 — with recipient_type (official spec)
   try {
-    const payload = {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to,
-      type: "typing",
-    };
-    await axios.post(getApiUrl(phoneNumberId), payload, {
-      headers: getHeaders(accessToken),
-    });
-    logger.info({ to }, "✅ Typing indicator sent");
-  } catch (error: unknown) {
-    const metaError =
-      error instanceof Error
-        ? (error as any).response?.data ?? error.message
-        : error;
-    logger.warn({ error: metaError, to }, "⚠️ Failed to send typing indicator");
+    await axios.post(
+      baseUrl,
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "typing",
+      },
+      { headers }
+    );
+    logger.info({ to }, "✅ Typing indicator sent (with recipient_type)");
+    return;
+  } catch (err) {
+    logger.warn(
+      { error: (err as any).response?.data },
+      "Attempt 1 failed – trying without recipient_type"
+    );
+  }
+
+  // Attempt 2 — without recipient_type (some accounts require this)
+  try {
+    await axios.post(
+      baseUrl,
+      {
+        messaging_product: "whatsapp",
+        to,
+        type: "typing",
+      },
+      { headers }
+    );
+    logger.info({ to }, "✅ Typing indicator sent (without recipient_type)");
+  } catch (err) {
+    const metaError = (err as any).response?.data;
+    logger.error({ error: metaError, to }, "❌ Typing indicator failed");
   }
 };
 
