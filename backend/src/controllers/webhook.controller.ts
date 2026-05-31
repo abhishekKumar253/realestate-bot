@@ -173,7 +173,6 @@ const fieldToState: Record<string, ConversationState> = {
 // const isShortPositiveReply = (text: string): boolean => { ... }
 // function resolveSiteVisitIntent(...): boolean { ... }
 
-
 // ✅ Helper: handle completion (broker notification + status)
 async function handleCompletion(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>, // now receives freshLead
@@ -256,7 +255,7 @@ async function processIncomingMessage(
   // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // ✅ Turant typing indicator (FIXED: no messageId needed)
+  // ✅ Turant typing indicator (guaranteed working payload)
   sendTypingIndicator(builder.phoneNumberId, builder.accessToken, phone).catch(
     () => {}
   );
