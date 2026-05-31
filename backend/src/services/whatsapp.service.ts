@@ -166,50 +166,33 @@ export const markAsRead = async (
 export const sendTypingIndicator = async (
   phoneNumberId: string,
   accessToken: string,
-  to: string
+  to: string,
+  messageId: string
 ): Promise<void> => {
-  const baseUrl = getApiUrl(phoneNumberId);
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-
-  // Attempt 1 — with recipient_type (official spec)
   try {
+    const payload = {
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: messageId,
+      typing_indicator: { type: "text" },
+    };
     await axios.post(
-      baseUrl,
+      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+      payload,
       {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "typing",
-      },
-      { headers }
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
-    logger.info({ to }, "✅ Typing indicator sent (with recipient_type)");
-    return;
-  } catch (err) {
+    logger.info({ to, messageId }, "✅ Typing indicator sent");
+  } catch (error: any) {
+    const metaError = error?.response?.data || error.message;
     logger.warn(
-      { error: (err as any).response?.data },
-      "Attempt 1 failed – trying without recipient_type"
+      { error: metaError, to, messageId },
+      "⚠️ Failed to send typing indicator"
     );
-  }
-
-  // Attempt 2 — without recipient_type (some accounts require this)
-  try {
-    await axios.post(
-      baseUrl,
-      {
-        messaging_product: "whatsapp",
-        to,
-        type: "typing",
-      },
-      { headers }
-    );
-    logger.info({ to }, "✅ Typing indicator sent (without recipient_type)");
-  } catch (err) {
-    const metaError = (err as any).response?.data;
-    logger.error({ error: metaError, to }, "❌ Typing indicator failed");
   }
 };
 

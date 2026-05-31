@@ -256,9 +256,12 @@ async function processIncomingMessage(
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
   // ✅ Turant typing indicator (guaranteed working payload)
-  sendTypingIndicator(builder.phoneNumberId, builder.accessToken, phone).catch(
-    () => {}
-  );
+  sendTypingIndicator(
+    builder.phoneNumberId,
+    builder.accessToken,
+    phone,
+    whatsappMessageId
+  ).catch(() => {});
 
   // 3. Site visit intent – not used in rapid mode, set false
   // const lastAssistantMessage = getLastAssistantMessage(history);
