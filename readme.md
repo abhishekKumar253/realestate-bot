@@ -161,7 +161,8 @@ TOKEN_ENCRYPTION_KEY=64_hex_chars
 SENTRY_DSN=optional
 
 
-Installation
+# Installation
+
 git clone https://github.com/abhishekKumar253/leadkaro-bot.git
 cd leadkaro-bot
 npm install
