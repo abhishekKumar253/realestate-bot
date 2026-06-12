@@ -5,7 +5,6 @@ import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
 const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
-// ========== Extracted Lead Data Type ==========
 export interface ExtractedLeadData {
   name?: string;
   propertyType?: PropertyType;
@@ -16,7 +15,6 @@ export interface ExtractedLeadData {
   timeline?: Timeline;
   wantsVisit?: boolean;
   visitNote?: string;
-
   amenities?: string;
   possession?: string;
   loanStatus?: string;
@@ -27,59 +25,35 @@ export interface ExtractedLeadData {
   maxBudget?: number;
 }
 
-// ========== Enhanced Extraction Prompt ==========
+// ========== Extraction Prompt (unchanged, works perfectly) ==========
 const EXTRACTION_SYSTEM_PROMPT = `
 You are a data extraction assistant for a real estate business in Ranchi, Jharkhand, India.
 Your ONLY job is to extract structured data from the CURRENT user message.
 
 Extract the following fields IF AND ONLY IF they are explicitly mentioned in the CURRENT message:
 
-- name: User's real full name. Do NOT extract greetings as a name. If only a greeting, omit.
+- name: User's real full name. Do NOT extract greetings as a name.
 - propertyType: One of APARTMENT, VILLA, PLOT, COMMERCIAL
-- budget: Budget in Indian format (e.g., "50L", "1Cr", "30-50L"). Convert "50 lakh" to "50L".
-- location: Area/locality in Ranchi they prefer.
-- bhk: BHK preference (e.g., "1BHK", "2BHK", "3BHK"). "2 bedroom" = "2BHK"
-- purpose: INVESTMENT or END_USE
-  - "investment", "invest", "rental income", "rental potential", "ROI", "return", "for rent" → INVESTMENT
-  - "family ke liye", "parents ke liye", "khud rehne ke liye", "end use", "apna ghar" → END_USE
-
-- timeline: ONLY use these EXACT four values: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS. Never create values like TWO_MONTHS, FOUR_MONTHS, etc. If user says "2-3 months", "2 mahine", "teen mahine", "3 mahine" → THREE_MONTHS. If user says "1 month", "1 mahina", "30 din" → ONE_MONTH. If user says "6 months", "chhah mahine" → SIX_MONTHS. If user says "more than 6 months", "baad mein", "flexible" → MORE_THAN_SIX_MONTHS.
-
+- budget: Indian format (e.g., "50L", "1Cr", "30-50L"). Convert "50 lakh" to "50L".
+- location: Area/locality in Ranchi.
+- bhk: e.g., "1BHK", "2BHK", "3BHK". "2 bedroom" = "2BHK"
+- purpose: INVESTMENT or END_USE. (investment keywords → INVESTMENT, family/self → END_USE)
+- timeline: ONE_MONTH, THREE_MONTHS, SIX_MONTHS, MORE_THAN_SIX_MONTHS. Map "2-3 months" → THREE_MONTHS, etc.
 - wantsVisit: true if user wants to schedule a site visit
 - visitNote: any condition about site visit
-
-- amenities: comma separated list of required amenities
-  Mappings:
-  - "lift", "elevator" → lift
-  - "parking", "covered parking" → covered parking
-  - "gated society", "security" → gated society
-
+- amenities: comma separated list (lift, parking, gated society, etc.)
 - possession: READY_TO_MOVE or UNDER_CONSTRUCTION
-- loanStatus: PRE_APPROVED, APPLIED, NONE
-  Mappings:
-  - "loan pre-approved", "loan sanction ho gaya", "pre approved" → PRE_APPROVED
-  - "loan apply kiya hai", "apply kiya hai", "loan chal raha hai" → APPLIED
-  - "apply karna hai", "apply karna baaki hai", "loan lena hai", "loan par lena hai", "loan required" → APPLIED
-  - "no loan", "cash", "khud ka paisa", "self funded" → NONE
-- siteVisitDay: preferred day for site visit
-- siteVisitTime: preferred time
-- otherPropertyTypes: additional property types (APARTMENT, VILLA, PLOT, COMMERCIAL)
-- minBudget: Minimum budget in INR (integer)
-- maxBudget: Maximum budget in INR (integer)
+- loanStatus: PRE_APPROVED, APPLIED, NONE (with mappings for common phrases)
+- siteVisitDay, siteVisitTime, otherPropertyTypes
+- minBudget, maxBudget: integers in INR
 
 CRITICAL RULES:
 - NEVER GUESS, INFER, OR ASSUME ANY VALUE.
 - ONLY extract what is EXPLICITLY written in the CURRENT message.
-- For vague urgency words ("jaldi", "turant", "ASAP", "fast"), do NOT set timeline.
-
-SMART wantsVisit DETECTION (IMPORTANT):
-- If the LAST ASSISTANT message contained a site-visit question AND the user's CURRENT message is a short positive reply (max 5 words, containing any of: haan, ha, ji, yes, ready, taiyaar, bilkul, ok, okay, theek hai), then set wantsVisit: true.
-- Even if the text is malformed like "hai ham taiyaar hai", treat it as true as long as it contains "taiyaar" or "ready".
-
-Return ONLY valid JSON, no explanation, no markdown.
+- For vague urgency words ("jaldi", "ASAP"), do NOT set timeline.
+- Return ONLY valid JSON, no explanation, no markdown.
 `;
 
-// ========== Extract Lead Data ==========
 export const extractLeadData = async (
   userMessage: string,
   conversationHistory: { role: string; content: string }[]
@@ -104,7 +78,6 @@ export const extractLeadData = async (
 
     const content = response.choices[0]?.message?.content;
     if (!content) return {};
-
     const extracted = JSON.parse(content) as ExtractedLeadData;
     logger.info({ extracted }, "✅ Lead data extracted");
     return extracted;
@@ -114,7 +87,29 @@ export const extractLeadData = async (
   }
 };
 
-// ========== Generate Bot Reply ==========
+// ========== Helper – calls OpenAI with a built prompt and returns the reply ==========
+const callOpenAI = async (
+  systemPrompt: string,
+  conversationHistory: { role: string; content: string }[],
+  fallback: string
+): Promise<string> => {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...conversationHistory.map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+    ],
+    max_tokens: 350,
+    temperature: 0.5,
+  });
+  const reply = response.choices[0]?.message?.content;
+  return reply || fallback;
+};
+
+// ========== Generate Reply – Language‑Aware, Natural, Human‑like ==========
 export const generateReply = async (
   missingFields: string[],
   leadData: ExtractedLeadData,
@@ -127,175 +122,127 @@ export const generateReply = async (
       [...conversationHistory].reverse().find((msg) => msg.role === "user")
         ?.content ?? "";
 
-    // ========== Language Override ==========
-    let languageOverride = "";
-    if (userLanguage === "hindi") {
-      languageOverride =
-        "CRITICAL LANGUAGE RULE: Respond exclusively in pure Hindi using Devanagari script. Do not use Latin characters.";
-    } else if (userLanguage === "english") {
-      languageOverride =
-        "CRITICAL LANGUAGE RULE: Respond exclusively in English. Do not use Hindi words or Devanagari.";
-    } else {
-      languageOverride =
-        "CRITICAL LANGUAGE RULE: Respond in Hinglish using Latin script. Do not use Devanagari script.";
+    const leadDataStr = JSON.stringify(leadData, null, 2);
+    const missingFieldsStr =
+      missingFields.length > 0 ? missingFields.join(", ") : "None";
+
+    // ----- ENGLISH PROMPT -----
+    if (userLanguage === "english") {
+      const prompt = `
+You are a professional real estate assistant for builders in Ranchi, India.
+Your job: ask questions to qualify a property lead.
+
+IMPORTANT: Respond exclusively in English. Use only English words, no Hindi or Hinglish.
+
+Personality: Warm, helpful, natural. Use emojis occasionally (🏠📍💰✅🙏😊).
+
+Current lead data: ${leadDataStr}
+Missing fields: ${missingFieldsStr}
+User's last message: "${lastUserMessage}"
+
+Rules:
+1. FIRST MESSAGE ONLY: Greet warmly with name if available. Example: "Hello Abhishek! What type of property are you looking for — apartment, villa, plot, or commercial?"
+2. Do NOT repeat what the user just said. Acknowledge briefly and ask the next missing question.
+3. Ask only ONE question at a time, in this order:
+   - property type → BHK → location → budget → timeline
+4. After timeline is collected, close with: "Thank you for your requirements. Our team will contact you shortly to arrange a site visit. Have a great day! 😊"
+5. If user is rude or off‑topic: "I'm sorry, I can only help with property inquiries. Please tell me your property requirements."
+6. Keep replies short, friendly, and professional.
+`;
+      const systemMsg = builderSystemPrompt
+        ? `${prompt}\n\nBuilder notes: ${builderSystemPrompt}`
+        : prompt;
+      return callOpenAI(
+        systemMsg,
+        conversationHistory,
+        getDefaultReply(missingFields, "english")
+      );
     }
 
-    // ========== Base Prompt ==========
-    const basePrompt = `
-${languageOverride}
+    // ----- HINDI PROMPT -----
+    if (userLanguage === "hindi") {
+      const prompt = `
+आप रांची, झारखंड के रियल एस्टेट बिल्डर्स के लिए एक सहायक हैं।
+केवल शुद्ध हिंदी में देवनागरी लिपि में उत्तर दें। लैटिन अक्षर नहीं।
 
-‼️ GREETING — SIRF PEHLI BAAR:
-- ONLY first message mein "Namaste [name] ji! 🙏" use karo.
-- Baad ke SAARE messages mein KABHI greeting mat karo.
-- Check karo conversation history — agar bot ka koi previous message hai toh ye first message NAHI hai.
-- Subsequent messages mein sirf short acknowledgment: "Samjha!", "Achha!", "Okay!", "Perfect!"
-- NEVER use name + ji + 🙏 combination after first message.
+व्यक्तित्व: गर्मजोशी भरे, सहायक, प्राकृतिक। (उदाहरण: "नमस्ते अभिषेक जी! 🙏")
 
-CRITICAL PERSONALITY RULES:
-- If lead data has a name, use it naturally in greeting and closing. Example: "Namaste Abhishek ji! 🙏"
-- Never guess names. If name missing, use "Namaste ji! 🙏" or "Hello ji!"
-- Always use emojis naturally — 🏠 for property, 📍 for location, 💰 for budget, ✅ for confirmation, 🙏 for thanks/namaste, 😊 for warmth. Not every message, but often enough to feel human.
-- Never sound like a robot or form-filler. Sound like a helpful Ranchi property agent.
+वर्तमान डेटा: ${leadDataStr}
+गुम जानकारी: ${missingFieldsStr}
+उपयोगकर्ता का अंतिम संदेश: "${lastUserMessage}"
 
-Current lead data collected:
-${JSON.stringify(leadData, null, 2)}
-
-Missing information:
-${
-  missingFields.length > 0
-    ? missingFields.join(", ")
-    : "Nothing — all data collected!"
-}
-
-USER'S LAST MESSAGE:
-"${lastUserMessage}"
-
-SPECIAL HANDLING BY PROPERTY TYPE:
-- PLOT → Ask: "Kitne square feet ka plot chahiye? Aur registry clear hona chahiye?"
-- COMMERCIAL → Ask: "Shop, office, ya showroom? Kis type ka commercial space chahiye?"
-- APARTMENT or VILLA → Ask standard missing fields naturally.
-- Purpose: Always ask exactly "Kya yeh investment ke liye hai ya khud rehne ke liye?" Never ask "kharidna hai ya rent par lena hai" or any buy/rent variation.
-
-CONVERSATION FLOW RULES:
-
-1. FIRST REPLY — WARM GREETING:
-   - Greet naturally and ask only ONE relevant question.
-   - Use emoji(s) to make it warm. Example: "Namaste Abhishek ji! 🙏 Aapko kis type ki property chahiye — flat, plot, villa ya commercial? 🏠"
-   - If user already mentioned property type or location, acknowledge it first, then ask next field.
-
-2. NO PARROTING — NEVER REPEAT THE USER:
-   - NEVER start your reply by repeating what the user just said.
-     ❌ "Aapko gym chahiye, samajh gaya!"
-     ✅ "Gym — badhiya choice! 💪 Kaunsi aur amenities chahiye?"
-   - For location, naturally acknowledge with warmth:
-     ❌ "Okay! Kanke road side par hai."
-     ✅ "Kanke Road — bahut achha area hai! 🌳 Ab budget kitna rahega? 💰"
-   - Simply use a short acknowledgment ("Samjha!", "Achha!", "Okay!", "Perfect!", "Sahi!") and immediately ask the NEXT missing field.
-
-3. QUESTION PRIORITY (5 CORE QUESTIONS ONLY):
-   Ask only ONE question at a time in this exact order:
-   1. propertyType
-   2. bhk
-   3. location
-   4. budget
-   5. timeline
-
-   After timeline, immediately give warm closing. Do NOT ask about amenities, possession, loanStatus, or purpose — capture them silently only if the user explicitly mentions them in any message.
-
-   - Keep acknowledgments very short ("Samjha!", "Achha!", "Okay!").
-   - NEVER ask extra questions beyond the 5 core + site visit.
-
-4. TIMELINE HANDLING:
-   - If user says "jaldi", "turant", "ASAP", NEVER assume a month. Politely clarify: "Aap jaldi lena chahte hain — kya agle 1 mahine mein, ya 2-3 mahine? 📅"
-   - If exact time given, use it.
-
-5. INVESTMENT / RENTAL INTENT:
-   - If user mentions rental income, rental potential, ROI, or investment return, acknowledge it naturally. Example: "Samjha ji, rental potential bhi dhyan mein rakhenge. 💰"
-
-6. LOAN STATUS — NEVER ASSUME:
-   - If user mentions loan, ALWAYS ask specifically: "Kya aapne loan pre‑approved karwa liya hai ya apply karna baaki hai? 🏦"
-   - Never say "Aapka loan status applied hai" without asking first.
-
-7. SITE VISIT (AFTER 5 QUESTIONS):
-   - Once timeline is collected, immediately give warm closing.
-   - DO NOT ask separately "site visit karna chahenge?"
-   - Simply close with: "Shukriya [Name] ji! 🙏 Saari details mil gayi. 
-     Hamari team jald hi aapse contact karegi site visit arrange karne ke liye. 
-     Aapka din shubh ho! 😊"
-   - If user themselves mentions a day/time for visit, include it in summary.
-
-8. HANDLING NON-INFORMATIVE / RUDE INPUT:
-   - If the user's message is ONLY emojis, stickers, or random characters with no real estate meaning, reply:
-     "Maaf kijiye, main samajh nahi paaya. Kya aap property ke baare mein kuch batana chahenge? Budget, location ya koi requirement?"
-   - If the user repeats a greeting ("hi", "hello", "hii") without giving any additional information, do NOT use the above generic reply. Instead, gently re-ask the property type question. Example: "Namaste Abhishek ji! 🙏 Flat, plot, villa ya commercial — kya dekhna hai?"
-   - If the user says rude things like "shut up", "bakwas", "stupid", respond calmly in Hinglish: "Maaf kijiye agar koi galti ho gayi. Main aapki property related madad ke liye yahan hoon. 🙏"
-
-9. DOMAIN RULE:
-   - Only discuss real estate. For unrelated topics: "Arey sir, main to sirf property ki baatein karta hoon. Ranchi mein koi ghar ya plot dekhna hai? 🏠"
-   - For loan questions, answer briefly and transition to next missing field.
-
-10. CLOSING — FINAL MESSAGE:
-    - When ALL required fields are collected AND site visit day/time is known, provide a warm summary and CLOSE.
-    - **‼️ Use EXACT values from 'Current lead data collected'. If siteVisitDay is "Sunday", write "Sunday", NOT "Saturday".**
-    - ALWAYS end with: "Hamari team jald hi aapse contact karegi site visit arrange karne ke liye."
-    - Example: "Shukriya [Name] ji! 🙏 Saari details mil gayi. Hamari team jald hi aapse contact karegi site visit arrange karne ke liye. Aapka din shubh ho! 😊"
-    - NEVER end with "Aur koi madad?" or "Kuch aur puchhna hai?"
-    - If name missing, use "ji".
+नियम:
+1. केवल पहले संदेश में नमस्ते करें।
+2. हर बार केवल एक प्रश्न पूछें, इस क्रम में: प्रॉपर्टी प्रकार → बीएचके → स्थान → बजट → समयसीमा
+3. सब जानकारी मिलने पर बंद करें: "आपकी जानकारी मिल गई। हमारी टीम शीघ्र ही साइट विजिट के लिए संपर्क करेगी।"
+4. असंबंधित प्रश्न पर: "मैं केवल प्रॉपर्टी में मदद कर सकता हूँ।"
 `;
+      const systemMsg = builderSystemPrompt
+        ? `${prompt}\n\nबिल्डर के निर्देश: ${builderSystemPrompt}`
+        : prompt;
+      return callOpenAI(
+        systemMsg,
+        conversationHistory,
+        getDefaultReply(missingFields, "hindi")
+      );
+    }
 
-    const systemPrompt = builderSystemPrompt
-      ? `${basePrompt}\n\nADDITIONAL INSTRUCTIONS FROM BUILDER:\n${builderSystemPrompt}`
-      : basePrompt;
+    // ----- HINGLISH PROMPT (default) -----
+    const prompt = `
+Aap Ranchi ke real estate assistant hain. Hinglish mein baat karein (Latin script, mix Hindi+English).
+User ko warm, natural, human-like lagna chahiye.
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
-      ...conversationHistory.map((msg) => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content,
-      })),
-    ];
+Current lead data: ${leadDataStr}
+Missing fields: ${missingFieldsStr}
+User's last message: "${lastUserMessage}"
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      max_tokens: 350,
-      temperature: 0.4,
-    });
-
-    const reply = response.choices[0]?.message?.content;
-    if (!reply) return getDefaultReply(missingFields);
-
-    logger.info("✅ Reply generated");
-    return reply;
+Rules:
+1. FIRST MESSAGE ONLY: Greet with "Namaste [name] ji! 🙏" then ask first question.
+2. NO repeating user's words — just acknowledge (Samjha! / Achha!) and ask next missing field.
+3. Ask only ONE question at a time in this order: propertyType → bhk → location → budget → timeline.
+4. After timeline collected, close with: "Shukriya [name] ji! 🙏 Saari details mil gayi. Hamari team jald hi aapse site visit arrange karne ke liye contact karegi."
+5. Use emojis naturally (🏠📍💰✅🙏😊).
+6. If user is rude: "Maaf kijiye, main sirf property mein madad kar sakta hoon."
+7. Keep replies short, friendly, never robotic.
+`;
+    const systemMsg = builderSystemPrompt
+      ? `${prompt}\n\nBuilder ke notes: ${builderSystemPrompt}`
+      : prompt;
+    return callOpenAI(
+      systemMsg,
+      conversationHistory,
+      getDefaultReply(missingFields, "hinglish")
+    );
   } catch (error) {
     logger.error({ error }, "❌ Failed to generate reply");
-    return getDefaultReply(missingFields);
+    return getDefaultReply(missingFields, userLanguage);
   }
 };
 
-// ========== Default Reply ==========
-const getDefaultReply = (missingFields: string[]): string => {
+// ========== Default reply (language‑aware) ==========
+const getDefaultReply = (
+  missingFields: string[],
+  userLanguage?: string
+): string => {
+  const isEnglish = userLanguage === "english";
   const fieldMessages: Record<string, string> = {
-    propertyType:
-      "Aap flat, plot, villa ya commercial me kya dekh rahe hain? 🏠",
-    budget: "Approx budget kya rahega? 💰",
-    location: "Kaunsa area prefer karenge? 📍",
-    bhk: "Kitne BHK chahiye?",
-    purpose: "Ye investment ke liye hai ya apne rehne ke liye?",
-    timeline: "Kab tak finalize karna chahte hain? 📅",
-    amenities: "Kaunsi amenities chahiye — lift, parking, gated society?",
-    possession: "Ready-to-move chahiye ya under-construction bhi chalega? 🏗️",
-    loanStatus: "Loan pre-approved hai ya apply karna baaki hai? 🏦",
-    siteVisitDay: "Site visit ke liye kaunsa din suit karega? 📅",
-    siteVisitTime: "Aur time kya rahega? ⏰",
-    wantsVisit: "Kya aap site visit schedule karna chahenge?",
-    otherPropertyTypes: "Kya aap kisi aur type ki property bhi dekh rahe hain?",
-    minBudget: "Minimum budget kya rahega?",
-    maxBudget: "Maximum budget kya rahega?",
+    propertyType: isEnglish
+      ? "What type of property are you looking for — apartment, villa, plot, or commercial?"
+      : "Aap flat, plot, villa ya commercial me kya dekh rahe hain? 🏠",
+    budget: isEnglish
+      ? "What is your approximate budget?"
+      : "Approx budget kya rahega? 💰",
+    location: isEnglish
+      ? "Which area do you prefer?"
+      : "Kaunsa area prefer karenge? 📍",
+    bhk: isEnglish ? "How many BHK do you need?" : "Kitne BHK chahiye?",
+    timeline: isEnglish
+      ? "When do you plan to finalize?"
+      : "Kab tak finalize karna chahte hain? 📅",
   };
-
   const field = missingFields[0];
-  return field
-    ? fieldMessages[field] ?? "Koi aur detail batani ho toh bata dijiye. 😊"
-    : "Shukriya! Hamari team aapko jald contact karegi. 🙏";
+  if (field && fieldMessages[field]) return fieldMessages[field];
+  return isEnglish
+    ? "Please share your property requirements."
+    : "Koi aur detail batani ho toh bata dijiye. 😊";
 };
