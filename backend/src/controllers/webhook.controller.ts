@@ -41,7 +41,6 @@ import type {
 import { prisma } from "../db/prisma";
 import {
   REQUIRED_LEAD_FIELDS,
-  // SITE_VISIT_AFFIRMATIVE_PATTERNS,  // Dead code – commented
   OPT_OUT_PHRASES,
 } from "../constants/conversation.constants";
 
@@ -162,20 +161,11 @@ const fieldToState: Record<string, ConversationState> = {
   purpose: ConversationState.ASK_PURPOSE,
   timeline: ConversationState.ASK_TIMELINE,
   name: ConversationState.ASK_NAME,
-  // amenities: ConversationState.ASK_AMENITIES,
-  // possession: ConversationState.ASK_POSSESSION,
-  // loanStatus: ConversationState.ASK_LOAN_STATUS,
-  // siteVisitDay: ConversationState.ASK_SITE_VISIT_DAY,
 };
-
-// ========== Dead site‑visit code (commented out – rapid mode mein nahi chahiye) ==========
-// const hasSiteVisitSignal = (text: string): boolean => { ... }
-// const isShortPositiveReply = (text: string): boolean => { ... }
-// function resolveSiteVisitIntent(...): boolean { ... }
 
 // ✅ Helper: handle completion (broker notification + status)
 async function handleCompletion(
-  lead: Awaited<ReturnType<typeof getOrCreateLead>>, // now receives freshLead
+  lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   builder: BuilderWithToken,
   mergedLead: Record<string, unknown>
 ) {
@@ -227,7 +217,6 @@ const computeNewState = (
       ? fieldToState[firstMissing]
       : currentState;
   }
-  // directly COMPLETED — site visit alag nahi poochhna
   return ConversationState.COMPLETED;
 };
 
@@ -242,7 +231,6 @@ async function processIncomingMessage(
   >,
   builder: BuilderWithToken
 ): Promise<void> {
-  // 1. Conversation history
   const history = await getConversationHistory(conversation.id);
   const historyForOpenAI = history.map((msg) => ({
     role:
@@ -252,10 +240,8 @@ async function processIncomingMessage(
     content: msg.content,
   }));
 
-  // 2. Extract lead data
   const extracted = await extractLeadData(userText, historyForOpenAI);
 
-  // ✅ Turant typing indicator (guaranteed working payload)
   sendTypingIndicator(
     builder.phoneNumberId,
     builder.accessToken,
@@ -263,12 +249,8 @@ async function processIncomingMessage(
     whatsappMessageId
   ).catch(() => {});
 
-  // 3. Site visit intent – not used in rapid mode, set false
-  // const lastAssistantMessage = getLastAssistantMessage(history);
-  // resolveSiteVisitIntent(userText, extracted, lastAssistantMessage);
-  extracted.wantsVisit = false; // force false
+  extracted.wantsVisit = false;
 
-  // 4. Save user message
   await saveMessage(
     conversation.id,
     MessageRole.USER,
@@ -276,14 +258,12 @@ async function processIncomingMessage(
     whatsappMessageId
   );
 
-  // 5. Update lead
   const updateData = buildUpdateData(extracted);
   const freshLead =
     Object.keys(updateData).length > 0
       ? await updateLead(lead.id, updateData)
       : lead;
 
-  // 6. mergedLead
   const mergedLead = {
     propertyType: freshLead.propertyType,
     budget: freshLead.budget,
@@ -303,11 +283,8 @@ async function processIncomingMessage(
   };
 
   const missingFields = getMissingFields(mergedLead);
-
-  // 7. Compute state (no wantsVisit argument)
   const finalState = computeNewState(conversation.state, missingFields);
 
-  // 8. Handle completion (pass freshLead instead of old lead)
   if (
     finalState === ConversationState.COMPLETED &&
     missingFields.length === 0
@@ -315,10 +292,8 @@ async function processIncomingMessage(
     await handleCompletion(freshLead, builder, mergedLead);
   }
 
-  // 9. Update conversation state
   await updateConversationState(conversation.id, finalState);
 
-  // 10. Generate reply
   const userLanguage = detectLanguage(userText);
   const reply = await generateReply(
     missingFields,
@@ -346,7 +321,6 @@ async function processIncomingMessage(
     userLanguage
   );
 
-  // 11. Send reply + save bot message
   const isSent = await sendTextMessage(
     builder.phoneNumberId,
     builder.accessToken,
@@ -396,7 +370,6 @@ async function sendFallbackIfNeeded(
   return false;
 }
 
-// Helper for audio message handling
 async function processIncomingAudio(
   message: IncomingMessage,
   builder: BuilderWithToken
@@ -461,7 +434,6 @@ async function handleOptOut(
   return false;
 }
 
-// Conversation reset logic (lead fields cleared on COMPLETED)
 async function getActiveConversation(
   lead: Awaited<ReturnType<typeof getOrCreateLead>>,
   phone: string
@@ -496,7 +468,48 @@ async function getActiveConversation(
   return conversation;
 }
 
-// ========== POST — Incoming Messages (with voice note handling & fallback) ==========
+// ========== NEW Helper: extract user text from message (reduces cognitive complexity) ==========
+async function extractUserTextFromMessage(
+  message: IncomingMessage,
+  builder: BuilderWithToken
+): Promise<string | null> {
+  // Audio -> transcription
+  if (message.type === "audio") {
+    const transcript = await processIncomingAudio(message, builder);
+    return transcript; // processIncomingAudio already sends fallback on failure, returns null
+  }
+
+  // Check for caption on media messages
+  const hasCaption =
+    (message.type === "image" && message.image?.caption) ||
+    (message.type === "video" && message.video?.caption) ||
+    (message.type === "document" && message.document?.caption);
+
+  if (hasCaption) {
+    return (
+      (message as any).image?.caption ??
+      (message as any).video?.caption ??
+      (message as any).document?.caption ??
+      ""
+    );
+  }
+
+  // Normal text / interactive
+  if (message.type === "text" || message.type === "interactive") {
+    return getUserText(message);
+  }
+
+  // Unsupported type (no caption, not audio, not text/interactive)
+  await sendTextMessage(
+    builder.phoneNumberId,
+    builder.accessToken,
+    normalizePhone(message.from),
+    "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
+  );
+  return null;
+}
+
+// ========== POST — Incoming Messages (refactored for low cognitive complexity) ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -519,34 +532,9 @@ export const handleIncoming = async (
     const message = extractMessage(body);
     if (!message) return;
 
-    // ✅ FALLBACK FOR NON‑TEXT, NON‑AUDIO, NON‑INTERACTIVE MESSAGES (IMAGE, VIDEO, ETC.)
-    if (
-      message.type !== "text" &&
-      message.type !== "interactive" &&
-      message.type !== "audio"
-    ) {
-      await sendTextMessage(
-        builder.phoneNumberId,
-        builder.accessToken,
-        normalizePhone(message.from),
-        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
-      );
-      return;
-    }
+    const userText = await extractUserTextFromMessage(message, builder);
+    if (!userText) return; // fallback already sent inside extractor
 
-    // ── Voice Note (Audio) Handling ──
-    let userText: string;
-    if (message.type === "audio") {
-      const transcript = await processIncomingAudio(message, builder);
-      if (!transcript) return;
-      userText = transcript;
-    } else {
-      userText = getUserText(message);
-    }
-
-    if (!userText.trim()) return;
-
-    // Duplicate check
     if (await isDuplicate(message.id)) return;
 
     const contactName = extractContactName(body) ?? undefined;
@@ -581,7 +569,7 @@ export const handleIncoming = async (
       normalizePhone(message.from)
     );
 
-    // Refresh lead after potential reset (so cleared fields are visible)
+    // Refresh lead after reset if needed
     if (conversation.state === ConversationState.GREETING) {
       lead = await getOrCreateLead(
         normalizePhone(message.from),

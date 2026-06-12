@@ -54,9 +54,16 @@ export interface IncomingMessage {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string; description?: string };
   };
-  audio?: { id?: string; mime_type?: string }; 
-  image?: { id: string };
-  video?: { id: string };
+  // ✅ Caption support added
+  image?: { id: string; caption?: string; mime_type?: string };
+  video?: { id: string; caption?: string; mime_type?: string };
+  document?: {
+    id: string;
+    caption?: string;
+    filename?: string;
+    mime_type?: string;
+  };
+  audio?: { id?: string; mime_type?: string };
 }
 
 export interface Status {
