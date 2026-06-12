@@ -496,7 +496,7 @@ async function getActiveConversation(
   return conversation;
 }
 
-// ========== POST — Incoming Messages (with voice note handling) ==========
+// ========== POST — Incoming Messages (with voice note handling & fallback) ==========
 export const handleIncoming = async (
   req: Request,
   res: Response
@@ -519,7 +519,22 @@ export const handleIncoming = async (
     const message = extractMessage(body);
     if (!message) return;
 
-    // Voice Note (Audio) Handling
+    // ✅ FALLBACK FOR NON‑TEXT, NON‑AUDIO, NON‑INTERACTIVE MESSAGES (IMAGE, VIDEO, ETC.)
+    if (
+      message.type !== "text" &&
+      message.type !== "interactive" &&
+      message.type !== "audio"
+    ) {
+      await sendTextMessage(
+        builder.phoneNumberId,
+        builder.accessToken,
+        normalizePhone(message.from),
+        "Maaf kijiye, main abhi sirf text messages samajh sakta hoon. 🙏 Kripya apni property requirement type karke bhej dijiye. 🏠"
+      );
+      return;
+    }
+
+    // ── Voice Note (Audio) Handling ──
     let userText: string;
     if (message.type === "audio") {
       const transcript = await processIncomingAudio(message, builder);
