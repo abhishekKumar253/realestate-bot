@@ -105,30 +105,7 @@ Real estate builders lose **30‑50% of WhatsApp enquiries** because:
 | **Validation** | Zod |
 | **Encryption** | AES‑256‑GCM (builder tokens) |
 
----
 
-## 📁 Folder Structure
-
-backend/
-├── prisma/
-│ └── schema.prisma
-├── scripts/
-│ ├── addBuilder.ts
-│ └── createBuilder.ts
-├── src/
-│ ├── config/ # env, sentry
-│ ├── constants/ # conversation constants
-│ ├── controllers/ # webhook, export
-│ ├── db/ # prisma client
-│ ├── jobs/ # follow‑up, daily summary
-│ ├── middlewares/ # validation, signature
-│ ├── routes/ # webhook, export
-│ ├── services/ # builder, lead, openai, whatsapp
-│ ├── types/ # whatsapp types
-│ └── utils/ # helpers, logger, crypto
-└── tmp/ # temporary CSV files
-
----
 
 ## 🚀 Getting Started
 
