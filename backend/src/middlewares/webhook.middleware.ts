@@ -8,12 +8,6 @@ export const verifySignature = (
   res: Response,
   next: NextFunction
 ): void => {
-  if (!env.WHATSAPP_APP_SECRET) {
-    logger.warn("⚠️ WHATSAPP_APP_SECRET not set — skipping verification");
-    next();
-    return;
-  }
-
   const signature = req.headers["x-hub-signature-256"] as string;
 
   if (!signature) {
@@ -23,19 +17,19 @@ export const verifySignature = (
   }
 
   if (!req.rawBody) {
-    logger.warn("❌ No raw body available");
+    logger.warn("❌ No raw body available (Check express.json verify flag)");
     res.status(500).json({ error: "Internal configuration error" });
     return;
   }
 
-  const expectedSignature = `sha256=${crypto
+  const actualSig = signature.replace("sha256=", "");
+  const expectedSig = crypto
     .createHmac("sha256", env.WHATSAPP_APP_SECRET)
     .update(req.rawBody)
-    .digest("hex")}`;
+    .digest("hex");
 
-  // Timing-safe comparison
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSignature);
+  const sigBuf = Buffer.from(actualSig, "hex");
+  const expBuf = Buffer.from(expectedSig, "hex");
 
   if (
     sigBuf.length !== expBuf.length ||

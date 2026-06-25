@@ -18,7 +18,6 @@ export const scheduleFollowUp = async (
   try {
     const jobId = `followup-${type}-${leadId}`;
 
-    // Direct O(1) lookup instead of scanning whole queue
     const existingJob = await followUpQueue.getJob(jobId);
     if (existingJob) {
       logger.info({ jobId }, "⚠️ Follow-up already scheduled, skipping");
@@ -29,6 +28,7 @@ export const scheduleFollowUp = async (
       jobId,
       { leadId, type },
       {
+        jobId,
         delay: delayMs,
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
@@ -43,12 +43,7 @@ export const scheduleFollowUp = async (
 
 export const cancelFollowUps = async (leadId: string): Promise<void> => {
   try {
-    const jobs = await followUpQueue.getJobs([
-      "delayed",
-      "waiting",
-      "active",
-      "prioritized",
-    ]);
+    const jobs = await followUpQueue.getJobs(["delayed", "waiting", "active"]);
     const jobsToCancel = jobs.filter((job) => job.data.leadId === leadId);
 
     await Promise.all(jobsToCancel.map((job) => job.remove()));

@@ -1,26 +1,28 @@
 import type { Request, Response, NextFunction } from "express";
-import { ZodType, ZodError } from "zod";
+import { z } from "zod";
 import logger from "../utils/logger";
 
-export const validate =
-  (schema: ZodType) =>
-  (req: Request, res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req.body);
+type Source = "body" | "query" | "params";
+
+export const validate = <T extends z.ZodType>(
+  schema: T,
+  source: Source = "body"
+) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req[source]);
 
     if (!result.success) {
-      const errors =
-        result.error instanceof ZodError
-          ? result.error.issues.map((issue) => ({
-              field: issue.path.join("."),
-              message: issue.message,
-            }))
-          : [{ field: "unknown", message: "Validation failed" }];
+      const errors = result.error.issues.map((issue) => ({
+        field: issue.path.join("."),
+        message: issue.message,
+      }));
 
-      logger.warn({ errors }, "❌ Validation failed");
+      logger.warn({ errors, source }, "Validation failed");
       res.status(400).json({ error: "Bad Request", details: errors });
       return;
     }
 
-    req.body = result.data;
+    req[source] = result.data;
     next();
   };
+};

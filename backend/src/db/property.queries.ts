@@ -2,6 +2,15 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./client";
 import { generateEmbedding } from "../utils/embeddings";
 
+type PropertyRow = {
+  id: string;
+  name: string;
+  bhk: string;
+  price: bigint;
+  location: string;
+  similarity: number;
+};
+
 export const findSimilarProperties = async (
   queryText: string,
   builderId: string,
@@ -20,16 +29,7 @@ export const findSimilarProperties = async (
   const embeddingString = `[${queryEmbedding.join(",")}]`;
   const vector = Prisma.sql`${embeddingString}::vector`;
 
-  return prisma.$queryRaw<
-    Array<{
-      id: string;
-      name: string;
-      bhk: string;
-      price: number;
-      location: string;
-      similarity: number;
-    }>
-  >`
+  const rows: PropertyRow[] = await prisma.$queryRaw`
     SELECT 
       p.id, 
       pr.name, 
@@ -45,4 +45,10 @@ export const findSimilarProperties = async (
     ORDER BY p.embedding <=> ${vector}
     LIMIT ${limit};
   `;
+
+  return rows.map((p) => ({
+    ...p,
+    price: Number(p.price),
+    similarity: Number(p.similarity),
+  }));
 };

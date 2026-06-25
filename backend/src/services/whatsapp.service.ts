@@ -3,6 +3,7 @@ import logger from "../utils/logger";
 import { toFile } from "openai/uploads";
 import { openai } from "../config/openai";
 import { env } from "../config/env";
+import { withRetry } from "../utils/retry";
 
 const getApiUrl = (phoneNumberId: string) =>
   `https://graph.facebook.com/${env.META_API_VERSION}/${phoneNumberId}/messages`;
@@ -22,31 +23,30 @@ export const sendTextMessage = async (
   to: string,
   message: string
 ): Promise<boolean> => {
-  try {
-    const response = await axios.post(
-      getApiUrl(phoneNumberId),
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { preview_url: false, body: message },
-      },
-      { headers: getHeaders(accessToken) }
-    );
+  return withRetry(
+    async () => {
+      const response = await axios.post(
+        getApiUrl(phoneNumberId),
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "text",
+          text: { preview_url: false, body: message },
+        },
+        { headers: getHeaders(accessToken) }
+      );
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ Text message sent"
-    );
-    return true;
-  } catch (error) {
-    logger.error(
-      { error: getMetaError(error), to },
-      "❌ Failed to send text message"
-    );
-    return false;
-  }
+      logger.info(
+        { to, messageId: response.data.messages?.[0]?.id },
+        "Text message sent"
+      );
+      return true;
+    },
+    3,
+    1000,
+    "sendTextMessage"
+  );
 };
 
 // ========== Send Interactive Buttons ==========
@@ -57,40 +57,39 @@ export const sendButtonMessage = async (
   message: string,
   buttons: { id: string; title: string }[]
 ): Promise<boolean> => {
-  try {
-    const response = await axios.post(
-      getApiUrl(phoneNumberId),
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: message },
-          action: {
-            buttons: buttons.map((btn) => ({
-              type: "reply",
-              reply: { id: btn.id, title: btn.title },
-            })),
+  return withRetry(
+    async () => {
+      const response = await axios.post(
+        getApiUrl(phoneNumberId),
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "interactive",
+          interactive: {
+            type: "button",
+            body: { text: message },
+            action: {
+              buttons: buttons.map((btn) => ({
+                type: "reply",
+                reply: { id: btn.id, title: btn.title },
+              })),
+            },
           },
         },
-      },
-      { headers: getHeaders(accessToken) }
-    );
+        { headers: getHeaders(accessToken) }
+      );
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ Button message sent"
-    );
-    return true;
-  } catch (error) {
-    logger.error(
-      { error: getMetaError(error), to },
-      "❌ Failed to send button message"
-    );
-    return false;
-  }
+      logger.info(
+        { to, messageId: response.data.messages?.[0]?.id },
+        "Button message sent"
+      );
+      return true;
+    },
+    3,
+    1000,
+    "sendButtonMessage"
+  );
 };
 
 // ========== Send List Message ==========
@@ -105,35 +104,34 @@ export const sendListMessage = async (
     rows: { id: string; title: string; description?: string }[];
   }[]
 ): Promise<boolean> => {
-  try {
-    const response = await axios.post(
-      getApiUrl(phoneNumberId),
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          body: { text: message },
-          action: { button: buttonText, sections },
+  return withRetry(
+    async () => {
+      const response = await axios.post(
+        getApiUrl(phoneNumberId),
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "interactive",
+          interactive: {
+            type: "list",
+            body: { text: message },
+            action: { button: buttonText, sections },
+          },
         },
-      },
-      { headers: getHeaders(accessToken) }
-    );
+        { headers: getHeaders(accessToken) }
+      );
 
-    logger.info(
-      { to, messageId: response.data.messages?.[0]?.id },
-      "✅ List message sent"
-    );
-    return true;
-  } catch (error) {
-    logger.error(
-      { error: getMetaError(error), to },
-      "❌ Failed to send list message"
-    );
-    return false;
-  }
+      logger.info(
+        { to, messageId: response.data.messages?.[0]?.id },
+        "List message sent"
+      );
+      return true;
+    },
+    3,
+    1000,
+    "sendListMessage"
+  );
 };
 
 // ========== Mark Message as Read ==========
@@ -148,11 +146,11 @@ export const markAsRead = async (
       { messaging_product: "whatsapp", status: "read", message_id: messageId },
       { headers: getHeaders(accessToken) }
     );
-    logger.info({ messageId }, "✅ Message marked as read");
+    logger.info({ messageId }, "Message marked as read");
   } catch (error) {
     logger.warn(
       { error: getMetaError(error), messageId },
-      "⚠️ Failed to mark as read"
+      "Failed to mark as read"
     );
   }
 };
@@ -166,40 +164,39 @@ export const sendTemplateMessage = async (
   languageCode: string,
   bodyParams: string[]
 ): Promise<boolean> => {
-  try {
-    const response = await axios.post(
-      getApiUrl(phoneNumberId),
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: languageCode },
-          components: [
-            {
-              type: "body",
-              parameters: bodyParams.map((text) => ({ type: "text", text })),
-            },
-          ],
+  return withRetry(
+    async () => {
+      const response = await axios.post(
+        getApiUrl(phoneNumberId),
+        {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: languageCode },
+            components: [
+              {
+                type: "body",
+                parameters: bodyParams.map((text) => ({ type: "text", text })),
+              },
+            ],
+          },
         },
-      },
-      { headers: getHeaders(accessToken) }
-    );
+        { headers: getHeaders(accessToken) }
+      );
 
-    logger.info(
-      { to, templateName, messageId: response.data.messages?.[0]?.id },
-      "✅ Template message sent"
-    );
-    return true;
-  } catch (error) {
-    logger.error(
-      { error: getMetaError(error), to, templateName },
-      "❌ Failed to send template message"
-    );
-    return false;
-  }
+      logger.info(
+        { to, templateName, messageId: response.data.messages?.[0]?.id },
+        "Template message sent"
+      );
+      return true;
+    },
+    3,
+    1000,
+    "sendTemplateMessage"
+  );
 };
 
 // ========== Send Lead Notification to Broker ==========
@@ -259,7 +256,7 @@ export const sendLeadNotification = async (
      : ""
  }
 
-✅ *Lead qualify ho gayi!*`;
+✅ *Lead successfully qualified!*`;
 
   const success = await sendTextMessage(
     phoneNumberId,
@@ -269,9 +266,9 @@ export const sendLeadNotification = async (
   );
 
   if (success) {
-    logger.info({ brokerPhone }, "✅ Lead notification sent");
+    logger.info({ brokerPhone }, "Lead notification sent");
   } else {
-    logger.error({ brokerPhone }, "❌ Notification failed");
+    logger.error({ brokerPhone }, "Notification failed");
   }
 };
 
@@ -289,7 +286,7 @@ export const transcribeVoiceNote = async (
     );
     const mediaUrl = mediaRes.data.url;
     if (!mediaUrl) {
-      logger.error({ mediaId }, "❌ No media URL returned");
+      logger.error({ mediaId }, "No media URL returned");
       return null;
     }
 
@@ -305,12 +302,12 @@ export const transcribeVoiceNote = async (
       file: audioFile,
     });
 
-    logger.info({ transcript: transcript.text }, "✅ Voice note transcribed");
+    logger.info({ transcript: transcript.text }, "Voice note transcribed");
     return transcript.text;
   } catch (error) {
     logger.error(
       { error: getMetaError(error), mediaId },
-      "❌ Voice transcription failed"
+      "Voice transcription failed"
     );
     return null;
   }
