@@ -23,6 +23,7 @@ const envSchema = z.object({
   // Database (Neon)
   DATABASE_URL: z.string().refine(urlCheck, "Invalid DATABASE_URL"),
   DIRECT_URL: z.string().refine(urlCheck, "Invalid DIRECT_URL"),
+  APP_URL: z.string().default("http://localhost:5000"),
 
   // WhatsApp (Meta)
   WHATSAPP_APP_SECRET: z.string().min(1, "WHATSAPP_APP_SECRET is required"),
