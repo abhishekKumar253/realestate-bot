@@ -1,8 +1,15 @@
 import crypto from "node:crypto";
-import { env } from "../config/index";
+import { env } from "../config/env.js";
 
 const ALGORITHM = "aes-256-gcm";
-const KEY = Buffer.from(env.TOKEN_ENCRYPTION_KEY, "hex"); // 32 bytes
+const KEY = Buffer.from(env.TOKEN_ENCRYPTION_KEY, "hex");
+
+// ─── Validate key at module load ───────────────────────────────────────────
+if (KEY.length !== 32) {
+  throw new Error(
+    `TOKEN_ENCRYPTION_KEY must be 64 hex chars (32 bytes), got ${KEY.length} bytes`
+  );
+}
 
 // ─── Encrypt ─────────────────────────────────────────────────────────────────
 export const encryptToken = (plainToken: string): string => {
@@ -23,26 +30,29 @@ export const encryptToken = (plainToken: string): string => {
   });
 };
 
-// ─── Decrypt ─────────────────────────────────────────────────────────────────
+// ─── Decrypt 
 export const decryptToken = (encryptedJson: string): string => {
-  const { encrypted, iv, authTag } = JSON.parse(encryptedJson) as {
-    encrypted: string;
-    iv: string;
-    authTag: string;
-  };
+  try {
+    const { encrypted, iv, authTag } = JSON.parse(encryptedJson) as {
+      encrypted: string;
+      iv: string;
+      authTag: string;
+    };
 
-  const decipher = crypto.createDecipheriv(
-    ALGORITHM,
-    KEY,
-    Buffer.from(iv, "hex")
-  );
+    const decipher = crypto.createDecipheriv(
+      ALGORITHM,
+      KEY,
+      Buffer.from(iv, "hex")
+    );
+    decipher.setAuthTag(Buffer.from(authTag, "hex"));
 
-  decipher.setAuthTag(Buffer.from(authTag, "hex"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encrypted, "hex")),
+      decipher.final(),
+    ]);
 
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(encrypted, "hex")),
-    decipher.final(),
-  ]);
-
-  return decrypted.toString("utf8");
+    return decrypted.toString("utf8");
+  } catch {
+    throw new Error("Decryption failed — invalid or tampered token");
+  }
 };

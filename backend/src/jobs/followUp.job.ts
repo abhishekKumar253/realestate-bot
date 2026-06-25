@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/client";
 import { sendTextMessage } from "../services/whatsapp.service";
 import { decryptToken } from "../utils/crypto";
 import logger from "../utils/logger";

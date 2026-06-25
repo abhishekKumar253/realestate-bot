@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/client";
 import logger from "../utils/logger";
 
 // Human-readable mappings

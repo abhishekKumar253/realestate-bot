@@ -35,6 +35,7 @@ export interface Contact {
 
 export interface IncomingMessage {
   id: string;
+  timestamp: string;
   type:
     | "text"
     | "interactive"
@@ -54,7 +55,6 @@ export interface IncomingMessage {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string; description?: string };
   };
-  // ✅ Caption support added
   image?: { id: string; caption?: string; mime_type?: string };
   video?: { id: string; caption?: string; mime_type?: string };
   document?: {
@@ -63,7 +63,11 @@ export interface IncomingMessage {
     filename?: string;
     mime_type?: string;
   };
-  audio?: { id?: string; mime_type?: string };
+  audio?: { id: string; mime_type?: string }; 
+  context?: {
+    from: string;
+    id: string;
+  };
 }
 
 export interface Status {
@@ -73,14 +77,47 @@ export interface Status {
   recipient_id: string;
 }
 
-export interface SendMessagePayload {
+// ─── Outbound Payloads ────────────────────────────────────────
+export interface SendTextPayload {
   messaging_product: "whatsapp";
+  recipient_type: "individual";
   to: string;
   type: "text";
-  text: {
-    body: string;
+  text: { body: string; preview_url?: boolean };
+}
+
+export interface SendTemplatePayload {
+  messaging_product: "whatsapp";
+  to: string;
+  type: "template";
+  template: {
+    name: string;
+    language: { code: string };
+    components?: unknown[];
   };
 }
+
+export interface SendInteractiveListPayload {
+  messaging_product: "whatsapp";
+  to: string;
+  type: "interactive";
+  interactive: {
+    type: "list";
+    body: { text: string };
+    action: {
+      button: string;
+      sections: {
+        title: string;
+        rows: { id: string; title: string; description?: string }[];
+      }[];
+    };
+  };
+}
+
+export type SendMessagePayload =
+  | SendTextPayload
+  | SendTemplatePayload
+  | SendInteractiveListPayload;
 
 declare module "express" {
   interface Request {

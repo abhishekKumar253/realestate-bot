@@ -1,9 +1,9 @@
 generator client {
-    provider = "prisma-client-js"
+  provider        = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
+  provider  = "postgresql"
 }
 
 // ========== Enums ==========
@@ -24,20 +24,10 @@ enum PropertyType {
 }
 
 enum ConversationState {
-    GREETING
-    ASK_PROPERTY_TYPE
-    ASK_BUDGET
-    ASK_LOCATION
-    ASK_BHK
-    ASK_PURPOSE
-    ASK_TIMELINE
-    ASK_NAME
-    ASK_SITE_VISIT
-    ASK_AMENITIES
-    ASK_POSSESSION
-    ASK_LOAN_STATUS
-    ASK_SITE_VISIT_DAY
+    ACTIVE
     COMPLETED
+    HUMAN_HANDOFF
+    OPTED_OUT
 }
 
 enum MessageRole {
@@ -57,8 +47,38 @@ enum Timeline {
     MORE_THAN_SIX_MONTHS
 }
 
-// ========== Models ==========
+enum ProjectStatus {
+    PRE_LAUNCH
+    LAUNCHED
+    UNDER_CONSTRUCTION
+    READY_TO_MOVE
+    COMPLETED
+}
 
+enum FollowUpStatus {
+    PENDING
+    SENT
+    FAILED
+}
+
+enum OptInStatus {
+    OPTED_IN
+    OPTED_OUT
+}
+
+enum TemplateCategory {
+    MARKETING
+    UTILITY
+    SERVICE
+}
+
+enum TemplateStatus {
+    APPROVED
+    PENDING
+    REJECTED
+}
+
+// ========== Models ==========
 model Builder {
     id                String   @id @default(cuid())
     businessName      String
@@ -73,8 +93,14 @@ model Builder {
     createdAt         DateTime @default(now())
     updatedAt         DateTime @updatedAt
 
-    leads Lead[]
+    leads              Lead[]
+    projects           Project[]
+    optIns             OptIn[]
+    whatsappTemplates  WhatsAppTemplate[]
+    qualityRatings     QualityRating[]
 
+    @@index([phoneNumber])
+    @@index([isActive])
     @@map("builders")
 }
 
@@ -83,12 +109,11 @@ model Lead {
     phone              String
     name               String?
     propertyType       PropertyType?
-    budget             String?
     location           String?
     bhk                String?
     purpose            Purpose?
     timeline           Timeline?
-    amenities          String?
+    amenities          String?       @db.Text
     possession         String?
     loanStatus         String?
     siteVisitDay       String?
@@ -96,6 +121,7 @@ model Lead {
     otherPropertyTypes String?
     minBudget          Int?
     maxBudget          Int?
+    score              Int?          @default(0)
     status             LeadStatus    @default(NEW)
     createdAt          DateTime      @default(now())
     updatedAt          DateTime      @updatedAt
@@ -104,15 +130,21 @@ model Lead {
     builder   Builder @relation(fields: [builderId], references: [id])
 
     conversations Conversation[]
+    followUps     FollowUp[]
 
     @@unique([phone, builderId])
+    @@index([status])
+    @@index([location])
+    @@index([builderId])
     @@map("leads")
 }
 
 model Conversation {
     id                 String            @id @default(cuid())
     leadId             String
-    state              ConversationState @default(GREETING)
+    langGraphThreadId  String            @unique
+    languagePref       String            @default("en")
+    state              ConversationState @default(ACTIVE)
     lastFollowUpSentAt DateTime?
     createdAt          DateTime          @default(now())
     updatedAt          DateTime          @updatedAt
@@ -128,10 +160,131 @@ model Message {
     whatsappMessageId String?     @unique
     conversationId    String
     role              MessageRole
-    content           String
+    content           String      @db.Text
     createdAt         DateTime    @default(now())
 
     conversation Conversation @relation(fields: [conversationId], references: [id])
 
     @@map("messages")
+}
+
+model Locality {
+    id          String  @id @default(cuid())
+    name        String  @unique
+    area        String?
+    pincode     String?
+    latitude    Float?
+    longitude   Float?
+    isNearITHub Boolean @default(false)
+    rentRange   String?
+    buyRange    String?
+    commuteMap  Json?
+
+    properties Property[]
+
+    @@map("localities")
+}
+
+model Project {
+    id          String        @id @default(cuid())
+    builderId   String
+    name        String
+    description String?       @db.Text
+    reraNumber  String?       @unique
+    status      ProjectStatus @default(LAUNCHED)
+    createdAt   DateTime      @default(now())
+    updatedAt   DateTime      @updatedAt
+
+    builder    Builder     @relation(fields: [builderId], references: [id])
+    properties Property[]
+    reraDocs   ReraDoc[]
+
+    @@map("projects")
+}
+
+model Property {
+    id          String       @id @default(cuid())
+    projectId   String
+    localityId  String
+    type        PropertyType
+    bhk         String
+    price       Int
+    area        Int?
+    status      String       @default("AVAILABLE")
+    embedding   Unsupported("vector(1536)")?
+    createdAt   DateTime     @default(now())
+    updatedAt   DateTime     @updatedAt
+
+    project   Project  @relation(fields: [projectId], references: [id])
+    locality  Locality @relation(fields: [localityId], references: [id])
+
+    @@map("properties")
+}
+
+model FollowUp {
+    id          String         @id @default(cuid())
+    leadId      String
+    scheduledAt DateTime
+    type        String
+    status      FollowUpStatus @default(PENDING)
+    bullMQJobId String?
+    createdAt   DateTime       @default(now())
+    updatedAt   DateTime       @updatedAt
+
+    lead Lead @relation(fields: [leadId], references: [id])
+
+    @@index([scheduledAt, status])
+    @@map("follow_ups")
+}
+
+model OptIn {
+    id        String       @id @default(cuid())
+    phone     String
+    builderId String
+    status    OptInStatus  @default(OPTED_IN)
+    changedAt DateTime     @default(now())
+
+    builder Builder @relation(fields: [builderId], references: [id])
+
+    @@unique([phone, builderId])
+    @@map("opt_ins")
+}
+
+model WhatsAppTemplate {
+    id          String           @id @default(cuid())
+    builderId   String
+    name        String           @unique
+    language    String           @default("en")
+    category    TemplateCategory
+    content     String           @db.Text
+    metaStatus  TemplateStatus   @default(PENDING)
+    createdAt   DateTime         @default(now())
+
+    builder Builder @relation(fields: [builderId], references: [id])
+
+    @@map("whatsapp_templates")
+}
+
+model QualityRating {
+    id        String   @id @default(cuid())
+    builderId String
+    rating    Float
+    date      DateTime @default(now())
+
+    builder Builder @relation(fields: [builderId], references: [id])
+
+    @@index([builderId, date])
+    @@map("quality_ratings")
+}
+
+model ReraDoc {
+    id          String   @id @default(cuid())
+    projectId   String
+    docType     String
+    fileUrl     String
+    uploadedAt  DateTime @default(now())
+
+    project Project @relation(fields: [projectId], references: [id])
+
+    @@map("rera_docs")
 }

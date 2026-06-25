@@ -1,11 +1,13 @@
 import * as Sentry from "@sentry/node";
-import { env } from "./index";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import { env } from "./env";
 import logger from "../utils/logger";
 
 if (env.SENTRY_DSN) {
   try {
     Sentry.init({
       dsn: env.SENTRY_DSN,
+      integrations: [nodeProfilingIntegration()],
       tracesSampleRate: env.NODE_ENV === "production" ? 0.2 : 1,
       profilesSampleRate: 1,
       environment: env.NODE_ENV,
@@ -17,3 +19,5 @@ if (env.SENTRY_DSN) {
 } else {
   logger.warn("⚠️  SENTRY_DSN not set. Sentry is disabled.");
 }
+
+export { Sentry };

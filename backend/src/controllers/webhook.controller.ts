@@ -38,11 +38,11 @@ import type {
   WhatsAppWebhookPayload,
   IncomingMessage,
 } from "../types/whatsapp.types";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/client";
 import {
   REQUIRED_LEAD_FIELDS,
   OPT_OUT_PHRASES,
-} from "../constants/conversation.constants";
+} from "../constants/conversation.phrases";
 
 // ========== GET — Meta Webhook Verification ==========
 export const handleVerification = async (
@@ -418,7 +418,7 @@ async function handleOptOut(
 
   const lowerText = userText.toLowerCase().trim();
 
-  if (OPT_OUT_PHRASES.some((phrase) => lowerText.includes(phrase))) {
+  if (OPT_OUT_PHRASES.some((phrase: string) => lowerText.includes(phrase))) {
     await updateLeadStatus(lead.id, LeadStatus.LOST);
     await sendTextMessage(
       builder.phoneNumberId,

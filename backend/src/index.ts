@@ -1,96 +1,15 @@
-import "./config/sentry";
-import express from "express";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
-import * as Sentry from "@sentry/node";
-import { env } from "./config/index";
-import logger from "./utils/logger";
-import { prisma } from "./db/prisma";
-import webhookRouter from "./routes/webhook.route";
-import { startFollowUpJob } from "./jobs/followUp.job"; 
-import exportRouter from "./routes/export.route";
+import { prisma } from "./db/client";
+import { redis } from "./config/redis";
 
-const app = express();
+async function main() {
+  await prisma.$connect();
+  console.log("✅ Database connected");
 
-// ========== Trust Proxy (Railway) ==========
-app.set("trust proxy", 1);
+  await redis.ping();
+  console.log("✅ Redis connected");
 
-// ========== Middlewares ==========
-app.use(helmet());
-app.use(
-  express.json({
-    verify: (_req: any, _res, buf) => {
-      _req.rawBody = buf.toString();
-    },
-  })
-);
-app.use(express.urlencoded({ extended: true }));
+  await prisma.$disconnect();
+  await redis.quit();
+}
 
-// ========== Rate Limiting ==========
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests, please try again later.",
-});
-
-const webhookLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5000,
-  message: "Too many requests, please try again later.",
-});
-
-// ========== Routes ==========
-app.use("/webhook", webhookLimiter, webhookRouter);
-app.use("/export", generalLimiter, exportRouter);
-
-// ========== Health Check ==========
-app.get("/health", generalLimiter, (_req, res) => {
-  res.status(200).json({
-    status: "ok",
-    environment: env.NODE_ENV,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// ========== Global Error Handler ==========
-app.use(
-  async (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    logger.error({ err }, "Unhandled error");
-
-    if (env.SENTRY_DSN) {
-      Sentry.captureException(err);
-      await Sentry.flush(3000);
-    }
-
-    res.status(500).json({ error: "Internal server error" });
-  }
-);
-
-// ========== Server Start ==========
-const PORT = Number.parseInt(env.PORT, 10) || 5000;
-
-const start = async () => {
-  try {
-    await prisma.$connect();
-    logger.info("✅ Database connected");
-
-    app.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT} in ${env.NODE_ENV} mode`);
-      startFollowUpJob();
-    });
-  } catch (error) {
-    logger.error({ error }, "❌ Failed to start server");
-    if (env.SENTRY_DSN) {
-      Sentry.captureException(error);
-      await Sentry.flush(3000);
-    }
-    process.exit(1);
-  }
-};
-
-start();
+main().catch(console.error);

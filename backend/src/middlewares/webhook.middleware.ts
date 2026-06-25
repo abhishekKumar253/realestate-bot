@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import * as crypto from "node:crypto";
-import { env } from "../config/index";
+import { env } from "../config/env";
 import logger from "../utils/logger";
 
 export const verifySignature = (

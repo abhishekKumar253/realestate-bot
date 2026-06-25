@@ -1,4 +1,4 @@
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/client";
 import logger from "../utils/logger";
 import {
   LeadStatus,
@@ -9,11 +9,9 @@ import {
   MessageRole,
 } from "@prisma/client";
 
-// ========== Types (null allowed for reset) ==========
 export interface LeadUpdateData {
   name?: string | null;
   propertyType?: PropertyType | null;
-  budget?: string | null;
   location?: string | null;
   bhk?: string | null;
   purpose?: Purpose | null;
@@ -24,7 +22,6 @@ export interface LeadUpdateData {
   loanStatus?: string | null;
   siteVisitDay?: string | null;
   siteVisitTime?: string | null;
-  otherPropertyTypes?: string | null;
   minBudget?: number | null;
   maxBudget?: number | null;
 }
@@ -33,6 +30,7 @@ export interface LeadUpdateData {
 export const getOrCreateLead = async (
   phone: string,
   builderId: string,
+  langGraphThreadId: string,
   name?: string
 ) => {
   try {
@@ -50,7 +48,8 @@ export const getOrCreateLead = async (
         status: LeadStatus.NEW,
         conversations: {
           create: {
-            state: ConversationState.GREETING,
+            langGraphThreadId,
+            state: ConversationState.ACTIVE,
           },
         },
       },
@@ -144,10 +143,14 @@ export const saveMessage = async (
         whatsappMessageId: whatsappMessageId ?? null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (
-      error?.code === "P2002" &&
-      error?.meta?.target?.includes("whatsappMessageId")
+      error instanceof Error &&
+      (error as { code?: string; meta?: { target?: string[] } }).code ===
+        "P2002" &&
+      (
+        error as { code?: string; meta?: { target?: string[] } }
+      ).meta?.target?.includes("whatsappMessageId")
     ) {
       logger.warn({ whatsappMessageId }, "⚠️ Duplicate message skipped");
       return;
@@ -211,12 +214,16 @@ export const getLeadSummary = async (leadId: string) => {
 };
 
 // ========== Create New Conversation (Reset) ==========
-export const createNewConversation = async (leadId: string) => {
+export const createNewConversation = async (
+  leadId: string,
+  langGraphThreadId: string
+) => {
   try {
     const conversation = await prisma.conversation.create({
       data: {
         leadId,
-        state: ConversationState.GREETING,
+        langGraphThreadId,
+        state: ConversationState.ACTIVE,
       },
       include: {
         messages: true,

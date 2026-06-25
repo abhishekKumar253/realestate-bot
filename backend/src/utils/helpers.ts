@@ -1,12 +1,15 @@
 import {
   WhatsAppWebhookPayload,
   IncomingMessage,
-} from "../types/whatsapp.types";
+} from "../types/whatsapp.types.js";
 import {
   HINGLISH_WORDS,
   CASUAL_GREETINGS,
-} from "../constants/conversation.constants";
+  RUDE_WORDS,
+} from "../constants/conversation.phrases.js";
 
+
+// ─── WhatsApp payload extractors ─────────────────────────────────────────────
 export const extractMessage = (
   body: WhatsAppWebhookPayload
 ): IncomingMessage | null => {
@@ -16,10 +19,6 @@ export const extractMessage = (
   } catch {
     return null;
   }
-};
-
-export const normalizePhone = (phone: string): string => {
-  return phone.replace(/\D/g, "");
 };
 
 export const extractContactName = (
@@ -35,10 +34,6 @@ export const extractContactName = (
   }
 };
 
-export const formatTimestamp = (timestamp: string): Date => {
-  return new Date(Number.parseInt(timestamp) * 1000);
-};
-
 export const extractPhoneNumberId = (
   body: WhatsAppWebhookPayload
 ): string | null => {
@@ -51,14 +46,31 @@ export const extractPhoneNumberId = (
   }
 };
 
-/**
- * Detect language of a message: Devanagari (Hindi), English, or Hinglish.
- * Used to force bot replies in the correct language.
- */
+// ─── Phone & Timestamp helpers ────────────────────────────────────────────────
+export const normalizePhone = (phone: string): string => {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+};
+
+export const formatTimestamp = (timestamp: string): Date => {
+  const ms = Number.parseInt(timestamp);
+  if (Number.isNaN(ms)) return new Date();
+  return new Date(ms * 1000);
+};
+
+// ─── Language detection 
 export const detectLanguage = (
   text: string
-): "hindi" | "english" | "hinglish" => {
-  if (/[\u0900-\u097F]/.test(text)) return "hindi";
+): "en" | "hi" | "te" | "ta" | "hinglish" => {
+  // Telugu (U+0C00–U+0C7F)
+  if (/[\u0C00-\u0C7F]/.test(text)) return "te";
+
+  // Hindi / Devanagari (U+0900–U+097F) — covers Hindi + Marathi
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+
+  // Tamil (U+0B80–U+0BFF)
+  if (/[\u0B80-\u0BFF]/.test(text)) return "ta";
 
   const lowerText = text.toLowerCase().trim();
   const words = lowerText.split(/\s+/);
@@ -68,28 +80,12 @@ export const detectLanguage = (
     return "hinglish";
   }
 
-  // 3. Frustration / Rude words → force Hinglish (so bot replies in Hinglish, not English)
-  const rudeWords = new Set([
-    "shut up",
-    "stupid",
-    "bakwas",
-    "bakwaas",
-    "chup",
-    "hat",
-    "nalayak",
-    "idiot",
-    "dumb",
-    "mad",
-    "fuck",
-    "what the",
-    "what is this",
-  ]);
-  if (rudeWords.has(lowerText)) return "hinglish";
+  // Rude / frustration words → Hinglish
+  if (RUDE_WORDS.has(lowerText)) return "hinglish";
 
-  // If any Hinglish word found → Hinglish
+  // Hinglish vocabulary check
   const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
   if (hinglishCount > 0) return "hinglish";
 
-  // Default to English
-  return "english";
+  return "en";
 };
