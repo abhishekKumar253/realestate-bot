@@ -27,7 +27,8 @@ export const generateResponseNode = async (
       state.matchedProperties,
       historyForOpenAI,
       builder?.systemPrompt ?? null,
-      state.languagePref
+      state.languagePref,
+      state.contactName
     );
 
     logger.info(

@@ -183,9 +183,11 @@ export const handleIncoming = async (
       requiresHandoff: forceHandoff,
       shouldFollowUp: false,
       followUpType: undefined,
+      contactName: contactName,
     });
 
     if (graphResult.botReply) {
+      await new Promise((resolve) => setTimeout(resolve, 1500)); 
       const isSent = await sendTextMessage(
         builder.phoneNumberId,
         builder.accessToken,

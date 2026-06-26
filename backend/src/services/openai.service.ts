@@ -86,7 +86,8 @@ export const generateReply = async (
   matchedProperties: MatchPropertyOutput["matchedProperties"],
   conversationHistory: { role: string; content: string }[],
   builderSystemPrompt: string | null,
-  languagePref: LanguagePref
+  languagePref: LanguagePref,
+  contactName?: string
 ): Promise<string> => {
   try {
     const lastUserMessage =
@@ -110,20 +111,26 @@ export const generateReply = async (
 
     const prompt = `
 You are a professional real estate assistant for builders in Hyderabad, India.
- ${languageInstruction[languagePref]}
+${languageInstruction[languagePref]}
 
 Personality: Warm, helpful, natural. Use emojis occasionally (🏠📍💰✅🙏😊).
+${
+  contactName
+    ? `User's name is ${contactName}. Address them personally and warmly (e.g., "Hello ${contactName}! 😊").`
+    : ""
+}
 
 Current lead data: ${leadDataStr}
 Matched properties: ${propertiesStr}
 User's last message: "${lastUserMessage}"
- ${builderSystemPrompt ? `Builder specific notes: ${builderSystemPrompt}` : ""}
+${builderSystemPrompt ? `Builder specific notes: ${builderSystemPrompt}` : ""}
 
 Rules:
-1. Acknowledge user's input briefly and ask the next logical question or suggest a property.
-2. If properties are matched, summarize the best option and ask if they want a site visit.
-3. Keep replies short, friendly, and professional.
-4. If user is rude/off-topic: "Maaf kijiye/Main sorry, I can only help with property inquiries."
+1. If this is the first message, greet the user by name if available.
+2. Acknowledge user's input briefly and ask the next logical question or suggest a property.
+3. If properties are matched, summarize the best option and ask if they want a site visit.
+4. Keep replies short, friendly, and professional.
+5. If user is rude/off-topic: "I'm sorry, I can only help with property inquiries."
 `;
 
     const response = await openai.chat.completions.create({

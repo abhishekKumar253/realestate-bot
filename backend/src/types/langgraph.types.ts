@@ -38,6 +38,7 @@ export const LeadKaroGraphState = Annotation.Root({
   builderId: Annotation<string>,
   conversationId: Annotation<string>,
   currentMessage: Annotation<string>,
+  contactName: Annotation<string | undefined>, 
   languagePref: Annotation<LanguagePref>,
   extractedData: Annotation<QualifyLeadOutput["extractedData"]>,
   isQualified: Annotation<boolean>,

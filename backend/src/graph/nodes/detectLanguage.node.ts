@@ -7,12 +7,14 @@ export const detectLanguageNode = async (
 ): Promise<Partial<LeadKaroState>> => {
   const detected = detectLanguage(state.currentMessage);
 
+  const shouldOverride = ["hindi", "telugu", "tamil"].includes(detected);
+
   logger.info(
     { waId: state.waId, detected, msg: state.currentMessage.slice(0, 50) },
     "Language detected"
   );
 
   return {
-    languagePref: detected,
+    languagePref: shouldOverride ? detected : state.languagePref,
   };
 };

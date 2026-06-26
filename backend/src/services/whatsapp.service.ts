@@ -312,3 +312,24 @@ export const transcribeVoiceNote = async (
     return null;
   }
 };
+
+// ========== Send Typing Indicator ==========
+export const sendTypingIndicator = async (
+  phoneNumberId: string,
+  accessToken: string,
+  to: string
+): Promise<void> => {
+  try {
+    await axios.post(
+      getApiUrl(phoneNumberId),
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "reaction", 
+      },
+      { headers: getHeaders(accessToken) }
+    );
+  } catch {
+  }
+};
