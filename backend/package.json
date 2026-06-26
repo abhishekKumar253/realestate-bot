@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",
