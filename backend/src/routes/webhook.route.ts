@@ -1,16 +1,13 @@
 import { Router } from "express";
-import { verifySignature } from "../middlewares/webhook.middleware";
 import {
   handleVerification,
   handleIncoming,
 } from "../controllers/webhook.controller";
+import { verifySignature } from "../middlewares/webhook.middleware";
 
 const router = Router();
 
-// GET — Meta Webhook Verification
-router.get("/", handleVerification);
-
-// POST — Incoming Messages (signature verified)
-router.post("/", verifySignature, handleIncoming);
+router.get("/webhook", handleVerification);
+router.post("/webhook", verifySignature, handleIncoming);
 
 export default router;

@@ -1,140 +1,150 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import { format } from "@fast-csv/format";
+import { Prisma, LeadStatus } from "@prisma/client";
 import { prisma } from "../db/client";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import logger from "../utils/logger";
 
-// Human-readable mappings
-const timelineMap: Record<string, string> = {
-  ONE_MONTH: "1 Month",
-  THREE_MONTHS: "3 Months",
-  SIX_MONTHS: "6 Months",
-  MORE_THAN_SIX_MONTHS: "6+ Months",
-};
-
-const statusMap: Record<string, string> = {
-  NEW: "New",
-  QUALIFIED: "Qualified",
-  SITE_VISIT_SCHEDULED: "Site Visit Scheduled",
-  SITE_VISIT_DONE: "Site Visit Done",
-  CONVERTED: "Converted",
-  LOST: "Lost",
-};
-
-const purposeMap: Record<string, string> = {
-  INVESTMENT: "Investment",
-  END_USE: "Khud Rehne Ke Liye",
-};
-
-const possessionMap: Record<string, string> = {
-  READY_TO_MOVE: "Ready To Move",
-  UNDER_CONSTRUCTION: "Under Construction",
-};
-
-const loanStatusMap: Record<string, string> = {
-  PRE_APPROVED: "Pre Approved",
-  APPLIED: "Applied",
-  NONE: "No Loan",
-};
-
-/**
- * GET /export/leads?token=VERIFY_TOKEN
- * Authenticates builder via verifyToken and returns CSV of all leads.
- */
-export const exportLeads = async (
-  req: Request,
+const streamLeadsToCsv = async (
+  where: Prisma.LeadWhereInput,
   res: Response
 ): Promise<void> => {
-  try {
-    // ── 1. Authentication ──
-    const token = req.query["token"] as string;
-    if (!token) {
-      res.status(401).json({ error: "Token required" });
-      return;
-    }
+  const csvStream = format({ headers: true });
+  csvStream.pipe(res);
 
-    const builder = await prisma.builder.findFirst({
-      where: { verifyToken: token, isActive: true },
-    });
+  const BATCH_SIZE = 500;
+  let skip = 0;
+  let hasMore = true;
 
-    if (!builder) {
-      res.status(403).json({ error: "Invalid token or builder inactive" });
-      return;
-    }
-
-    // ── 2. Fetch leads ──
+  while (hasMore) {
     const leads = await prisma.lead.findMany({
-      where: { builderId: builder.id },
+      where,
+      skip,
+      take: BATCH_SIZE,
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        propertyType: true,
+        location: true,
+        bhk: true,
+        purpose: true,
+        timeline: true,
+        minBudget: true,
+        maxBudget: true,
+        score: true,
+        status: true,
+        siteVisitDay: true,
+        siteVisitTime: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
-    // ── 3. CSV Headers ──
-    const headers = [
-      "Name",
-      "Phone",
-      "Property Type",
-      "BHK",
-      "Location",
-      "Budget",
-      "Min Budget (Rs)",
-      "Max Budget (Rs)",
-      "Purpose",
-      "Timeline",
-      "Amenities",
-      "Possession",
-      "Loan Status",
-      "Site Visit Day",
-      "Site Visit Time",
-      "Status",
-      "Created At",
-    ];
+    if (leads.length === 0) break;
 
-    // ── 4. CSV Rows ──
-    const rows = leads.map((lead) => {
-      const cells = [
-        lead.name ?? "",
-        `+${lead.phone}`,
-        lead.propertyType ?? "",
-        lead.bhk ?? "",
-        lead.location ?? "",
-        lead.budget ?? "",
-        lead.minBudget?.toString() ?? "",
-        lead.maxBudget?.toString() ?? "",
-        lead.purpose ? purposeMap[lead.purpose] ?? lead.purpose : "",
-        lead.timeline ? timelineMap[lead.timeline] ?? lead.timeline : "",
-        lead.amenities ?? "",
-        lead.possession
-          ? possessionMap[lead.possession] ?? lead.possession
+    for (const lead of leads) {
+      csvStream.write({
+        ID: lead.id,
+        Name: lead.name ?? "",
+        Phone: lead.phone,
+        "Property Type": lead.propertyType ?? "",
+        Location: lead.location ?? "",
+        BHK: lead.bhk ?? "",
+        Purpose: lead.purpose ?? "",
+        Timeline: lead.timeline ?? "",
+        "Min Budget": lead.minBudget ?? "",
+        "Max Budget": lead.maxBudget ?? "",
+        Score: lead.score ?? 0,
+        Status: lead.status,
+        "Site Visit": lead.siteVisitDay
+          ? `${lead.siteVisitDay} ${lead.siteVisitTime ?? ""}`
           : "",
-        lead.loanStatus
-          ? loanStatusMap[lead.loanStatus] ?? lead.loanStatus
-          : "",
-        lead.siteVisitDay ?? "",
-        lead.siteVisitTime ?? "",
-        statusMap[lead.status] ?? lead.status,
-        lead.createdAt.toLocaleDateString("en-IN"),
-      ];
+        "Created At": lead.createdAt.toISOString(),
+        "Updated At": lead.updatedAt.toISOString(),
+      });
+    }
 
-      return cells.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",");
-    });
+    skip += BATCH_SIZE;
+    hasMore = leads.length === BATCH_SIZE;
+  }
 
-    // ── 5. Build CSV ──
-    const csvContent = [headers.join(","), ...rows].join("\n");
+  csvStream.end();
+};
 
-    // ── 6. Send file with BOM for Excel Hindi support ──
-    const BOM = "\uFEFF";
-    const filename = `leads_${builder.businessName.replace(/\s+/g, "_")}_${
-      new Date().toISOString().split("T")[0]
-    }.csv`;
+export const exportLeads = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  if (!req.builder?.isActive) {
+    res
+      .status(403)
+      .json({ success: false, error: "Invalid or inactive builder" });
+    return;
+  }
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.status(200).send(BOM + csvContent);
+  // Validations
+  const startDateStr = req.query.startDate as string | undefined;
+  const endDateStr = req.query.endDate as string | undefined;
+  const status = req.query.status as string | undefined;
+  const location = req.query.location as string | undefined;
 
+  if (startDateStr) {
+    const d = new Date(startDateStr);
+    if (isNaN(d.getTime())) {
+      res
+        .status(400)
+        .json({ success: false, error: "Invalid startDate format" });
+      return;
+    }
+  }
+
+  if (endDateStr) {
+    const d = new Date(endDateStr);
+    if (isNaN(d.getTime())) {
+      res.status(400).json({ success: false, error: "Invalid endDate format" });
+      return;
+    }
+  }
+
+  if (status && !Object.values(LeadStatus).includes(status as LeadStatus)) {
+    res.status(400).json({ success: false, error: "Invalid status filter" });
+    return;
+  }
+
+  const where: Prisma.LeadWhereInput = { builderId: req.builder.id };
+
+  if (startDateStr || endDateStr) {
+    where.createdAt = {};
+    if (startDateStr) where.createdAt.gte = new Date(startDateStr);
+    if (endDateStr) where.createdAt.lte = new Date(endDateStr);
+  }
+  if (status) where.status = status as LeadStatus;
+  if (location) where.location = { contains: location, mode: "insensitive" };
+
+  const safeName = req.builder.businessName.replace(/[^a-zA-Z0-9-_]/g, "_");
+  const filename = `leads-${safeName}-${
+    new Date().toISOString().split("T")[0]
+  }.csv`;
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  try {
+    await streamLeadsToCsv(where, res);
     logger.info(
-      { builderId: builder.id, count: leads.length },
-      "✅ Leads exported"
+      { builderId: req.builder.id, filename },
+      "CSV export completed"
     );
   } catch (error) {
-    logger.error({ error }, "❌ Export failed");
-    res.status(500).json({ error: "Export failed" });
+    logger.error({ error, builderId: req.builder.id }, "CSV export failed");
+
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+
+    res.status(500).json({ success: false, error: "Export failed" });
   }
 };

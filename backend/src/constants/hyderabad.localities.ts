@@ -2,9 +2,11 @@ export interface LocalityData {
   name: string;
   area: string;
   pincode: string;
+  latitude?: number;
+  longitude?: number;
   isNearITHub: boolean;
-  buyRange: string; 
-  rentRange: string; 
+  buyRange: string;
+  rentRange: string;
   landmarks: string[];
   commuteMap?: Record<string, string>;
 }
