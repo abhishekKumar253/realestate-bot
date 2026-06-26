@@ -1,9 +1,10 @@
-import { Worker, Job } from "bullmq";
+import { Worker, Job, Queue } from "bullmq";
 import { redisConnection } from "../config/redis";
 import { prisma } from "../db/client";
 import { getBuilderById } from "../services/builder.service";
 import { sendLeadNotification } from "../services/whatsapp.service";
 import logger from "../utils/logger";
+
 
 export const brokerAlertWorker = new Worker(
   "broker-alerts",
@@ -57,4 +58,8 @@ brokerAlertWorker.on("completed", (job) => {
 
 brokerAlertWorker.on("failed", (job: Job | undefined, err) => {
   logger.error({ jobId: job?.id, err }, "❌ Broker alert job failed");
+});
+
+export const brokerAlertQueue = new Queue("broker-alerts", {
+  connection: redisConnection,
 });

@@ -168,6 +168,7 @@ export const handleIncoming = async (
     await saveMessage(conversation.id, MessageRole.USER, userText, message.id);
 
     const graphResult = await invokeGraph({
+      leadId: lead.id,
       waId: phone,
       builderId: builder.id,
       conversationId: conversation.id,

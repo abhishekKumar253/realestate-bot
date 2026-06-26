@@ -7,6 +7,7 @@ import {
   CASUAL_GREETINGS,
   RUDE_WORDS,
 } from "../constants/conversation.phrases.js";
+import { LEAD_SCORE_WEIGHTS } from "../constants/lead.score.weights.js";
 
 
 // ─── WhatsApp payload extractors ─────────────────────────────────────────────
@@ -62,30 +63,42 @@ export const formatTimestamp = (timestamp: string): Date => {
 // ─── Language detection 
 export const detectLanguage = (
   text: string
-): "en" | "hi" | "te" | "ta" | "hinglish" => {
-  // Telugu (U+0C00–U+0C7F)
-  if (/[\u0C00-\u0C7F]/.test(text)) return "te";
-
-  // Hindi / Devanagari (U+0900–U+097F) — covers Hindi + Marathi
-  if (/[\u0900-\u097F]/.test(text)) return "hi";
-
-  // Tamil (U+0B80–U+0BFF)
-  if (/[\u0B80-\u0BFF]/.test(text)) return "ta";
+): "english" | "hindi" | "telugu" | "tamil" | "hinglish" => {
+  if (/[\u0C00-\u0C7F]/.test(text)) return "telugu";
+  if (/[\u0900-\u097F]/.test(text)) return "hindi";
+  if (/[\u0B80-\u0BFF]/.test(text)) return "tamil";
 
   const lowerText = text.toLowerCase().trim();
   const words = lowerText.split(/\s+/);
 
-  // Short casual greeting → Hinglish
-  if (CASUAL_GREETINGS.has(words[0]) && words.length <= 2) {
-    return "hinglish";
-  }
-
-  // Rude / frustration words → Hinglish
+  if (CASUAL_GREETINGS.has(words[0]) && words.length <= 2) return "hinglish";
   if (RUDE_WORDS.has(lowerText)) return "hinglish";
 
-  // Hinglish vocabulary check
-  const hinglishCount = words.filter((word) => HINGLISH_WORDS.has(word)).length;
+  const hinglishCount = words.filter((w) => HINGLISH_WORDS.has(w)).length;
   if (hinglishCount > 0) return "hinglish";
 
-  return "en";
+  return "english";
+};
+
+
+export const calculateLeadScore = (extractedData: {
+  bhk?: string;
+  location?: string;
+  minBudget?: number;
+  maxBudget?: number;
+  purpose?: string;
+  timeline?: string;
+  wantsVisit?: boolean;
+}): number => {
+  let score = 0;
+
+  if (extractedData.minBudget || extractedData.maxBudget)
+    score += LEAD_SCORE_WEIGHTS.BUDGET;
+  if (extractedData.location) score += LEAD_SCORE_WEIGHTS.LOCATION;
+  if (extractedData.timeline) score += LEAD_SCORE_WEIGHTS.TIMELINE;
+  if (extractedData.bhk) score += LEAD_SCORE_WEIGHTS.BHK;
+  if (extractedData.purpose) score += LEAD_SCORE_WEIGHTS.PURPOSE;
+  if (extractedData.wantsVisit) score += LEAD_SCORE_WEIGHTS.SITE_VISIT;
+
+  return score;
 };

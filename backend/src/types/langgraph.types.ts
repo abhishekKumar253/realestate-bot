@@ -1,4 +1,5 @@
 import { Annotation } from "@langchain/langgraph";
+import { PropertyType, Purpose, Timeline } from "@prisma/client";
 
 export type LanguagePref =
   | "hindi"
@@ -10,13 +11,14 @@ export type LanguagePref =
 export interface QualifyLeadOutput {
   isQualified: boolean;
   extractedData: {
-    propertyType?: string;
+    propertyType?: PropertyType;
     bhk?: string;
     location?: string;
     minBudget?: number;
     maxBudget?: number;
-    purpose?: string;
-    timeline?: string;
+    purpose?: Purpose;
+    timeline?: Timeline;
+    wantsVisit?: boolean;
   };
 }
 
@@ -31,6 +33,7 @@ export interface MatchPropertyOutput {
 }
 
 export const LeadKaroGraphState = Annotation.Root({
+  leadId: Annotation<string>,
   waId: Annotation<string>,
   builderId: Annotation<string>,
   conversationId: Annotation<string>,
@@ -44,7 +47,7 @@ export const LeadKaroGraphState = Annotation.Root({
   violationReason: Annotation<string | undefined>,
   requiresHandoff: Annotation<boolean>,
   shouldFollowUp: Annotation<boolean>,
-  followUpType: Annotation<"2H" | "24H" | "72H" | undefined>, 
+  followUpType: Annotation<"2H" | "24H" | "72H" | undefined>,
 });
 
 export type LeadKaroState = typeof LeadKaroGraphState.State;

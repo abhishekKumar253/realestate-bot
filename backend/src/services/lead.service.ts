@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 
 export interface LeadUpdateData {
+  score?: number;
   name?: string | null;
   propertyType?: PropertyType | null;
   location?: string | null;
