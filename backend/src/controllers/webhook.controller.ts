@@ -173,7 +173,7 @@ export const handleIncoming = async (
       builderId: builder.id,
       conversationId: conversation.id,
       currentMessage: userText,
-      languagePref: (conversation.languagePref as LanguagePref) || "hinglish",
+      languagePref: (conversation.languagePref as LanguagePref) || "english",
       extractedData: {},
       isQualified: false,
       matchedProperties: [],
