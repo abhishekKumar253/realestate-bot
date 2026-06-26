@@ -18,9 +18,9 @@ import "./workers/brokerAlert.worker";
 import "./workers/statusVerify.worker";
 
 // Cron Jobs
-import { startCronJobs } from "./jobs/dailySummary.job.js";
-import { startQualityMonitor } from "./jobs/qualityMonitor.job.js";
-import { startFollowUpJob } from "./jobs/followup.job.js";
+import { startCronJobs } from "./jobs/dailySummary.job";
+import { startQualityMonitor } from "./jobs/qualityMonitor.job";
+import { startFollowUpJob } from "./jobs/followup.job";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
