@@ -44,6 +44,7 @@ export const LeadKaroGraphState = Annotation.Root({
   violationReason: Annotation<string | undefined>,
   requiresHandoff: Annotation<boolean>,
   shouldFollowUp: Annotation<boolean>,
+  followUpType: Annotation<"2H" | "24H" | "72H" | undefined>, 
 });
 
 export type LeadKaroState = typeof LeadKaroGraphState.State;
