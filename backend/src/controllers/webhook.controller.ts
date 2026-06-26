@@ -182,6 +182,7 @@ export const handleIncoming = async (
       violationReason: undefined,
       requiresHandoff: forceHandoff,
       shouldFollowUp: false,
+      followUpType: undefined,
     });
 
     if (graphResult.botReply) {
