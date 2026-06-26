@@ -5,6 +5,52 @@ import { prisma } from "../db/client";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import logger from "../utils/logger";
 
+// ========== Helper: Date validation ==========
+const isValidDate = (str: string): boolean => {
+  const d = new Date(str);
+  return !Number.isNaN(d.getTime());
+};
+
+// ========== Helper: Build where clause ==========
+const buildWhere = (
+  builderId: string,
+  startDateStr?: string,
+  endDateStr?: string,
+  status?: string,
+  location?: string
+): Prisma.LeadWhereInput => {
+  const where: Prisma.LeadWhereInput = { builderId };
+
+  if (startDateStr || endDateStr) {
+    where.createdAt = {};
+    if (startDateStr) where.createdAt.gte = new Date(startDateStr);
+    if (endDateStr) where.createdAt.lte = new Date(endDateStr);
+  }
+  if (status) where.status = status as LeadStatus;
+  if (location) where.location = { contains: location, mode: "insensitive" };
+
+  return where;
+};
+
+// ========== Helper: Validate query params ==========
+const validateParams = (
+  startDateStr?: string,
+  endDateStr?: string,
+  status?: string
+): { valid: boolean; error?: string } => {
+  if (startDateStr && !isValidDate(startDateStr)) {
+    return { valid: false, error: "Invalid startDate format" };
+  }
+  if (endDateStr && !isValidDate(endDateStr)) {
+    return { valid: false, error: "Invalid endDate format" };
+  }
+  if (status && !Object.values(LeadStatus).includes(status as LeadStatus)) {
+    return { valid: false, error: "Invalid status filter" };
+  }
+  return { valid: true };
+};
+
+// ========== Helper: Stream leads to CSV ==========
 const streamLeadsToCsv = async (
   where: Prisma.LeadWhereInput,
   res: Response
@@ -73,6 +119,7 @@ const streamLeadsToCsv = async (
   csvStream.end();
 };
 
+// ========== Main Controller ==========
 export const exportLeads = async (
   req: AuthenticatedRequest,
   res: Response
@@ -84,44 +131,24 @@ export const exportLeads = async (
     return;
   }
 
-  // Validations
   const startDateStr = req.query.startDate as string | undefined;
   const endDateStr = req.query.endDate as string | undefined;
   const status = req.query.status as string | undefined;
   const location = req.query.location as string | undefined;
 
-  if (startDateStr) {
-    const d = new Date(startDateStr);
-    if (isNaN(d.getTime())) {
-      res
-        .status(400)
-        .json({ success: false, error: "Invalid startDate format" });
-      return;
-    }
-  }
-
-  if (endDateStr) {
-    const d = new Date(endDateStr);
-    if (isNaN(d.getTime())) {
-      res.status(400).json({ success: false, error: "Invalid endDate format" });
-      return;
-    }
-  }
-
-  if (status && !Object.values(LeadStatus).includes(status as LeadStatus)) {
-    res.status(400).json({ success: false, error: "Invalid status filter" });
+  const validation = validateParams(startDateStr, endDateStr, status);
+  if (!validation.valid) {
+    res.status(400).json({ success: false, error: validation.error });
     return;
   }
 
-  const where: Prisma.LeadWhereInput = { builderId: req.builder.id };
-
-  if (startDateStr || endDateStr) {
-    where.createdAt = {};
-    if (startDateStr) where.createdAt.gte = new Date(startDateStr);
-    if (endDateStr) where.createdAt.lte = new Date(endDateStr);
-  }
-  if (status) where.status = status as LeadStatus;
-  if (location) where.location = { contains: location, mode: "insensitive" };
+  const where = buildWhere(
+    req.builder.id,
+    startDateStr,
+    endDateStr,
+    status,
+    location
+  );
 
   const safeName = req.builder.businessName.replace(/[^a-zA-Z0-9-_]/g, "_");
   const filename = `leads-${safeName}-${
