@@ -326,10 +326,12 @@ export const sendTypingIndicator = async (
         messaging_product: "whatsapp",
         recipient_type: "individual",
         to,
-        type: "reaction", 
+        type: "typing", 
       },
       { headers: getHeaders(accessToken) }
     );
-  } catch {
+    logger.info({ to }, "✅ Typing indicator sent");
+  } catch (error) {
+    logger.warn({ error, to }, "⚠️ Typing indicator failed");
   }
 };

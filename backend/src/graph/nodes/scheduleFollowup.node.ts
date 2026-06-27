@@ -1,9 +1,9 @@
 import { LeadKaroState } from "../../types/langgraph.types";
-import { scheduleFollowUp } from "../../services/followup.service";
 import { updateLead } from "../../services/lead.service";
 import { calculateLeadScore } from "../../utils/helpers";
 import { brokerAlertQueue } from "../../workers/brokerAlert.worker";
 import logger from "../../utils/logger";
+import { scheduleFollowUp } from "../../services/followup.service";
 
 export const scheduleFollowupNode = async (
   state: LeadKaroState
@@ -20,22 +20,15 @@ export const scheduleFollowupNode = async (
       logger.info({ waId: state.waId, score }, "Broker alert triggered");
     }
 
+    // Follow-up disabled until properties are seeded in DB
     if (state.shouldFollowUp && state.followUpType) {
       const delays = {
         "2H": 2 * 60 * 60 * 1000,
         "24H": 24 * 60 * 60 * 1000,
         "72H": 72 * 60 * 60 * 1000,
       };
-
-      await scheduleFollowUp(
-        state.leadId,
-        state.followUpType,
-        delays[state.followUpType]
-      );
-      logger.info(
-        { waId: state.waId, type: state.followUpType },
-        "Follow-up scheduled"
-      );
+      await scheduleFollowUp(state.leadId, state.followUpType, delays[state.followUpType]);
+      logger.info({ waId: state.waId, type: state.followUpType }, "Follow-up scheduled");
     }
 
     return {

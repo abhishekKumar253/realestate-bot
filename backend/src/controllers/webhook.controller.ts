@@ -20,6 +20,7 @@ import {
   sendTextMessage,
   markAsRead,
   transcribeVoiceNote,
+  sendTypingIndicator,
 } from "../services/whatsapp.service";
 import {
   getBuilderByPhoneNumberId,
@@ -122,6 +123,12 @@ export const handleIncoming = async (
       builder.phoneNumberId,
       builder.accessToken,
       message.id
+    ).catch(() => {});
+
+    sendTypingIndicator(
+      builder.phoneNumberId,
+      builder.accessToken,
+      phone
     ).catch(() => {});
 
     let langGraphThreadId: string = crypto.randomUUID();

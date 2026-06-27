@@ -20,8 +20,6 @@ export const matchPropertyNode = async (
         state.builderId
       );
 
-    const noMatch = matchedProperties.length === 0;
-
     logger.info(
       {
         waId: state.waId,
@@ -33,15 +31,15 @@ export const matchPropertyNode = async (
 
     return {
       matchedProperties,
-      shouldFollowUp: noMatch,
-      followUpType: noMatch ? "24H" : undefined,
+      shouldFollowUp: false,
+      followUpType: undefined,
     };
   } catch (error) {
     logger.error({ error, waId: state.waId }, "Property matching failed");
     return {
       matchedProperties: [],
-      shouldFollowUp: true,
-      followUpType: "2H",
+      shouldFollowUp: false,
+      followUpType: undefined,
     };
   }
 };
