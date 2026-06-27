@@ -317,21 +317,25 @@ export const transcribeVoiceNote = async (
 export const sendTypingIndicator = async (
   phoneNumberId: string,
   accessToken: string,
-  to: string
+  to: string,
+  messageId: string
 ): Promise<void> => {
   try {
     await axios.post(
       getApiUrl(phoneNumberId),
       {
         messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "typing", 
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
       },
       { headers: getHeaders(accessToken) }
     );
     logger.info({ to }, "✅ Typing indicator sent");
   } catch (error) {
-    logger.warn({ error, to }, "⚠️ Typing indicator failed");
+    logger.warn(
+      { error: getMetaError(error), to },
+      "⚠️ Typing indicator failed"
+    );
   }
 };

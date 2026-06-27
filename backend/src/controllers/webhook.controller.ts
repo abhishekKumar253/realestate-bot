@@ -128,7 +128,8 @@ export const handleIncoming = async (
     sendTypingIndicator(
       builder.phoneNumberId,
       builder.accessToken,
-      phone
+      phone,
+      message.id
     ).catch(() => {});
 
     let langGraphThreadId: string = crypto.randomUUID();
@@ -193,8 +194,7 @@ export const handleIncoming = async (
       contactName: contactName,
     });
 
-    if (graphResult.botReply) {
-      await new Promise((resolve) => setTimeout(resolve, 1500)); 
+    if (graphResult.botReply) { 
       const isSent = await sendTextMessage(
         builder.phoneNumberId,
         builder.accessToken,
