@@ -50,6 +50,9 @@ CRITICAL RULES:
 - Return ONLY valid JSON, no explanation, no markdown.
 `;
 
+const toOpenAIRole = (role: string): "user" | "assistant" =>
+  role === "user" || role === "USER" ? "user" : "assistant";
+
 export const extractLeadData = async (
   userMessage: string,
   conversationHistory: { role: string; content: string }[]
@@ -60,7 +63,7 @@ export const extractLeadData = async (
       messages: [
         { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
         ...conversationHistory.slice(-3).map((msg) => ({
-          role: msg.role as "user" | "assistant",
+          role: toOpenAIRole(msg.role),
           content: msg.content,
         })),
         { role: "user", content: userMessage },
@@ -144,7 +147,7 @@ Rules:
       messages: [
         { role: "system", content: prompt },
         ...conversationHistory.slice(-6).map((msg) => ({
-          role: msg.role as "user" | "assistant",
+          role: toOpenAIRole(msg.role),
           content: msg.content,
         })),
       ],

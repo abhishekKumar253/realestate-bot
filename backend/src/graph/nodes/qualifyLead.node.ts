@@ -22,7 +22,7 @@ export const qualifyLeadNode = async (
     const newExtractedData = await extractLeadData(
       state.currentMessage,
       history.toReversed().map((m) => ({
-        role: m.role.toLowerCase(),
+        role: m.role === "BOT" ? "assistant" : "user",
         content: m.content,
       }))
     );
