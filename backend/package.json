@@ -9,7 +9,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:properties": "npx @dotenvx/dotenvx run -- tsx scripts/seedProperties.ts"
   },
   
   "keywords": [],
